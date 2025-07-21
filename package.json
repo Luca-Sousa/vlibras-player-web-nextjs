@@ -1,5 +1,5 @@
 {
-  "name": "@vlibras/player-nextjs",
+  "name": "vlibras-player-nextjs",
   "version": "2.0.0",
   "description": "VLibras Player para Next.js - Biblioteca moderna para tradução de texto em Libras",
   "main": "./dist/index.js",
