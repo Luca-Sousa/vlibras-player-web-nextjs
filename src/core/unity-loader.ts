@@ -42,7 +42,6 @@ export class UnityLoader {
             accept();
           } else {
             const errorMsg = 'Seu navegador não suporta WebGL';
-            console.error(errorMsg);
             onError(errorMsg);
             deny();
           }
@@ -55,7 +54,6 @@ export class UnityLoader {
       onSuccess(player);
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Erro ao carregar Unity Player';
-      console.error('Unity loading error:', error);
       onError(errorMsg);
     }
   }
@@ -115,15 +113,18 @@ export class UnityLoader {
   }
 
   /**
-   * Configura o container do jogo
+   * ✅ MELHORADO: Configura o container do jogo com ID estável
    */
   private static setupGameContainer(container: HTMLElement): void {
+    // ✅ CORREÇÃO: ID mais estável baseado em região ou ID padrão
     if (!container.id) {
-      container.id = `vlibras-game-container-${Date.now()}`;
+      container.id = 'vlibras-game-container-main';
     }
 
-    // Adiciona classes necessárias
-    container.classList.add('emscripten', 'vlibras-unity-container');
+    // ✅ Verificar se já tem as classes necessárias para evitar duplicação
+    if (!container.classList.contains('emscripten')) {
+      container.classList.add('emscripten', 'vlibras-unity-container');
+    }
 
     // Define estilos básicos se necessário
     if (!container.style.position) {

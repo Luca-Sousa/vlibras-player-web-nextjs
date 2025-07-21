@@ -54,8 +54,23 @@ export class VLibrasPlayer {
       throw new Error('Navegador não suporta WebGL');
     }
 
+    // ✅ CORREÇÃO: Verificar se já existe container
+    const existingContainer = wrapper.querySelector('.vlibras-unity-container') as HTMLElement;
+    
+    if (existingContainer && this.state.loaded) {
+      // ✅ Reutilizar container existente se já carregado
+      this.container = existingContainer;
+      this.emit('load');
+      return Promise.resolve();
+    }
+
+    // ✅ CORREÇÃO: Limpar containers anteriores se existirem
+    const oldContainers = wrapper.querySelectorAll('[id*="vlibras-container"], [id*="vlibras-game-container"]');
+    oldContainers.forEach(container => container.remove());
+
+    // ✅ Criar novo container apenas se necessário
     this.container = document.createElement('div');
-    this.container.setAttribute('id', `vlibras-container-${Date.now()}`);
+    this.container.setAttribute('id', `vlibras-container-${this.options.region || 'default'}`);
     this.container.classList.add('vlibras-unity-container');
 
     wrapper.appendChild(this.container);
@@ -66,6 +81,8 @@ export class VLibrasPlayer {
         gameContainer: this.container!,
         onSuccess: (player) => {
           this.unityManager.setPlayerReference(player);
+          this.state.loaded = true; // ✅ Marcar como carregado
+          this.emit('load');
           resolve();
         },
         onError: (error) => {
@@ -245,15 +262,32 @@ export class VLibrasPlayer {
 
   /**
    * Destrói o player e limpa recursos
+  /**
+   * ✅ MELHORADO: Destrói o player e limpa recursos completamente
    */
   dispose(): void {
+    // Limpar listeners
     this.eventListeners.clear();
-    this.unityManager.dispose();
     
+    // Limpar Unity Manager
+    if (this.unityManager) {
+      this.unityManager.dispose();
+    }
+    
+    // ✅ CORREÇÃO: Limpeza completa do container
     if (this.container) {
       this.container.remove();
       this.container = null;
     }
+    
+    // ✅ Limpar estado
+    this.state.loaded = false;
+    this.state.status = 'idle';
+    this.state.translated = false;
+    this.state.progress = null;
+    
+    // Limpar referências
+    this.globalGlossLength = 0;
   }
 
   /**
@@ -269,7 +303,8 @@ export class VLibrasPlayer {
         try {
           (listener as any)(...args);
         } catch (error) {
-          console.error(`Error in VLibras event listener for ${event}:`, error);
+          // ✅ CORREÇÃO: Emitir erro em vez de console.error
+          this.emit('error', `Error in VLibras event listener for ${event}: ${error}`);
         }
       });
     }

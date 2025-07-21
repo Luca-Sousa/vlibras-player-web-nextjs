@@ -2,7 +2,7 @@
 
 > Biblioteca moderna do VLibras Player para Next.js e React com TypeScript
 
-![Version](https://img.shields.io/badge/version-v2.1.0-blue.svg)
+![Version](https://img.shields.io/badge/version-v2.1.1-blue.svg)
 ![License](https://img.shields.io/badge/license-LGPLv3-blue.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-Ready-blue.svg)
 ![Next.js](https://img.shields.io/badge/Next.js-13+-black.svg)
@@ -25,6 +25,7 @@ O **vlibras-player-nextjs** é uma biblioteca moderna e otimizada do VLibras Pla
 - 📦 **Tree-shaking** otimizado
 - 🧪 **Totalmente testado**
 - 🔄 **Conexão automática** ao container DOM (v2.1.0+)
+- 🔧 **Sem duplicação** de containers Unity (v2.1.1+)
 
 ## 📦 Instalação
 
@@ -38,7 +39,7 @@ pnpm add vlibras-player-nextjs
 
 ## 🚀 Uso Básico
 
-### Hook React (Recomendado) - v2.1.0+
+### Hook React (Recomendado) - v2.1.1+
 
 ```typescript
 'use client';
@@ -137,7 +138,33 @@ export default function DirectUsage() {
     }
   }, [player]);
 
-## 🆕 Novidades da v2.1.0
+## 🆕 Novidades da v2.1.1
+
+### 🔧 Bug Crítico de Duplicação Resolvido
+
+A v2.1.1 resolve um **bug crítico** que causava duplicação de containers Unity WebGL:
+
+#### ❌ Problema (v2.1.0 e anteriores)
+- 🔴 **Múltiplos containers**: Criava containers duplicados a cada re-render
+- 🔴 **Vazamentos de memória**: Containers órfãos não eram limpos
+- 🔴 **Performance degradada**: Múltiplas instâncias Unity simultâneas
+- 🔴 **IDs aleatórios**: Timestamps únicos impediam reutilização
+
+#### ✅ Solução (v2.1.1)
+- 🟢 **Container único**: Reutiliza container existente quando possível
+- 🟢 **Cleanup automático**: Remove containers órfãos antes de criar novos
+- 🟢 **IDs estáveis**: Baseados na região em vez de timestamps
+- 🟢 **Verificação de estado**: Só carrega Unity se necessário
+
+### 🚀 Melhorias Implementadas
+
+1. **Verificação de Container Existente**: Player reutiliza containers quando possível
+2. **Cleanup Automático**: Remove containers órfãos para evitar duplicação
+3. **IDs Estáveis**: Containers têm IDs previsíveis para melhor reutilização
+4. **Dispose Melhorado**: Limpeza completa de estado e recursos
+5. **Hook Otimizado**: Dependências otimizadas para evitar re-execuções
+
+## 🔄 Novidades da v2.1.0
 
 ### ✅ Hook useVLibrasPlayer Corrigido
 
@@ -155,7 +182,7 @@ useEffect(() => {
 }, [player]);
 ```
 
-#### ✅ Agora (v2.1.0 - Funciona!)
+#### ✅ Agora (v2.1.0+ - Funciona!)
 ```typescript
 const { translate, isReady } = useVLibrasPlayer({
   autoInit: true,
@@ -165,7 +192,7 @@ const { translate, isReady } = useVLibrasPlayer({
 // ✅ Pronto para usar, sem configuração adicional!
 ```
 
-### 🚀 Novas Funcionalidades
+### 🚀 Funcionalidades v2.1.0
 
 1. **Conexão Automática**: Use `containerRef` para conexão automática
 2. **Callbacks de Eventos**: `onLoad`, `onTranslateStart`, `onTranslateEnd`, `onError`
@@ -470,30 +497,51 @@ Os arquivos Unity são incluídos automaticamente na biblioteca, mas você pode 
 
 ## 🔄 Migração
 
-### De v2.0.0 para v2.1.0
+### De v2.1.0 para v2.1.1
 
-A v2.1.0 é **totalmente retrocompatível**. Seu código existente continuará funcionando, mas recomendamos migrar para a nova API:
+A v2.1.1 é **100% retrocompatível** e resolve automaticamente o problema de duplicação:
 
-#### ❌ Código Antigo (ainda funciona)
+#### ✅ Sem Mudanças Necessárias
+```typescript
+// Seu código existente continua funcionando perfeitamente
+const { translate, isReady } = useVLibrasPlayer({
+  autoInit: true,
+  containerRef
+});
+
+// ✅ Agora SEM duplicação de containers automático!
+```
+
+#### 🚀 Benefícios Automáticos da v2.1.1:
+- **Performance melhorada**: Sem containers duplicados
+- **Menos uso de memória**: Cleanup automático de recursos
+- **Estabilidade**: Comportamento consistente em re-renders
+- **React StrictMode**: Funciona perfeitamente com modo estrito
+
+### De v2.0.0 para v2.1.1
+
+Migração recomendada em duas etapas:
+
+#### ✅ Código Recomendado (v2.1.1)
+```typescript
+const { translate, isReady } = useVLibrasPlayer({
+  autoInit: true,
+  containerRef  // Conexão automática + sem duplicação
+});
+
+// ✅ API moderna sem problemas de performance
+```
+
+#### ❌ Código Antigo (ainda funciona, mas não recomendado)
 ```typescript
 const { player, translate } = useVLibrasPlayer({ autoInit: true });
 
 useEffect(() => {
   if (containerRef.current && player) {
-    // Conexão manual ainda funciona
+    // Conexão manual ainda funciona, mas é desnecessária
     player.load?.(containerRef.current);
   }
 }, [player]);
-```
-
-#### ✅ Código Recomendado (v2.1.0+)
-```typescript
-const { translate, isReady } = useVLibrasPlayer({
-  autoInit: true,
-  containerRef  // Conexão automática
-});
-
-// Sem necessidade de useEffect manual
 ```
 
 ### Do VLibras Original
@@ -664,7 +712,7 @@ Contribuições são bem-vindas! Por favor, leia nosso [guia de contribuição](
 
 <div align="center">
   
-**vlibras-player-nextjs v2.1.0** - *Acessibilidade em Libras para React e Next.js* 🤟
+**vlibras-player-nextjs v2.1.1** - *Acessibilidade em Libras para React e Next.js* 🤟
 
 [![NPM](https://img.shields.io/npm/v/vlibras-player-nextjs)](https://www.npmjs.com/package/vlibras-player-nextjs)
 [![Downloads](https://img.shields.io/npm/dm/vlibras-player-nextjs)](https://www.npmjs.com/package/vlibras-player-nextjs)

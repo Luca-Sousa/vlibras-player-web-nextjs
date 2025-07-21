@@ -77,9 +77,9 @@ export function useVLibrasPlayer(options: UseVLibrasPlayerExtendedOptions = {}):
     };
   }, [autoInit, onLoad, onError]);
 
-  // 🔥 CORREÇÃO PRINCIPAL: Conecta automaticamente ao container
+  // ✅ MELHORADO: Conecta automaticamente ao container com verificações robustas
   useEffect(() => {
-    if (playerRef.current && containerRef?.current) {
+    if (playerRef.current && containerRef?.current && !isReady) {
       try {
         playerRef.current.load(containerRef.current);
         setIsReady(true);
@@ -91,7 +91,7 @@ export function useVLibrasPlayer(options: UseVLibrasPlayerExtendedOptions = {}):
         onError?.(errorMessage);
       }
     }
-  }, [playerRef.current, containerRef?.current, onError]);
+  }, [playerRef.current, containerRef?.current]); // ✅ Remover onError das dependências
 
   const setupEventListeners = useCallback(() => {
     if (!playerRef.current) return;
