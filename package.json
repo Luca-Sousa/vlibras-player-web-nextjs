@@ -41,11 +41,7 @@
   "license": "LGPL-3.0",
   "repository": {
     "type": "git",
-<<<<<<< HEAD
     "url": "git+https://github.com/Luca-Sousa/vlibras-player-web-nextjs.git"
-=======
-    "url": "git+https://github.com/vlibras/vlibras-player-nextjs.git"
->>>>>>> a920a32b6367254287c1204037772fd11f602e18
   },
   "peerDependencies": {
     "next": ">=13.0.0",
