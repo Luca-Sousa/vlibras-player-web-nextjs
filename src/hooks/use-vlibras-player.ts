@@ -1,11 +1,11 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect, RefObject } from 'react';
-import type { UseVLibrasPlayer, VLibrasPlayerOptions, TranslationOptions, VLibrasPlayerState } from '../types';
+import type { UseVLibrasPlayer, VLibrasPlayerOptions, VLibrasPlayerCallbacks, TranslationOptions, VLibrasPlayerState } from '../types';
 import { VLibrasPlayer } from '../core/vlibras-player';
 
-// Estendendo as opções para incluir containerRef
-interface UseVLibrasPlayerExtendedOptions extends VLibrasPlayerOptions {
+// Estendendo as opções para incluir containerRef e callbacks
+interface UseVLibrasPlayerExtendedOptions extends VLibrasPlayerOptions, VLibrasPlayerCallbacks {
   containerRef?: RefObject<HTMLElement>;
   autoInit?: boolean;
   onLoad?: () => void;
@@ -40,6 +40,15 @@ export function useVLibrasPlayer(options: UseVLibrasPlayerExtendedOptions = {}):
     onTranslateStart, 
     onTranslateEnd,
     onError,
+    // ✅ Extrair novos callbacks
+    onTranslationStart,
+    onTranslationEnd,
+    onTranslationError,
+    onPlay,
+    onPause,
+    onStop,
+    onPlayerReady,
+    onPlayerError,
     ...playerOptions
   } = options;
 
@@ -47,19 +56,56 @@ export function useVLibrasPlayer(options: UseVLibrasPlayerExtendedOptions = {}):
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isReady, setIsReady] = useState(false);
+  const [isTranslating, setIsTranslating] = useState(false); // ✅ Novo estado
+  const [isPlaying, setIsPlaying] = useState(false); // ✅ Novo estado
   const [player, setPlayer] = useState<VLibrasPlayerState>(() => ({
     status: 'idle' as const,
     loaded: false,
     translated: false,
     progress: null,
     region: playerOptions.region || 'BR',
+    isTranslating: false, // ✅ Novo estado
+    isPlaying: false, // ✅ Novo estado
   }));
 
   // Inicializa o player quando autoInit = true
   useEffect(() => {
     if (autoInit && !playerRef.current) {
       try {
-        playerRef.current = new VLibrasPlayer(playerOptions);
+        playerRef.current = new VLibrasPlayer({
+          ...playerOptions,
+          // ✅ Passar callbacks para o player
+          onTranslationStart: () => {
+            setIsTranslating(true);
+            onTranslationStart?.();
+          },
+          onTranslationEnd: () => {
+            setIsTranslating(false);
+            onTranslationEnd?.();
+          },
+          onTranslationError: (error) => {
+            setIsTranslating(false);
+            onTranslationError?.(error);
+          },
+          onPlay: () => {
+            setIsPlaying(true);
+            onPlay?.();
+          },
+          onPause: () => {
+            setIsPlaying(false);
+            onPause?.();
+          },
+          onStop: () => {
+            setIsPlaying(false);
+            onStop?.();
+          },
+          onPlayerReady: () => {
+            onPlayerReady?.();
+          },
+          onPlayerError: (error) => {
+            onPlayerError?.(error);
+          },
+        });
         setupEventListeners();
         onLoad?.();
       } catch (err) {
@@ -75,7 +121,7 @@ export function useVLibrasPlayer(options: UseVLibrasPlayerExtendedOptions = {}):
         playerRef.current = null;
       }
     };
-  }, [autoInit, onLoad, onError]);
+  }, [autoInit, onLoad, onError, onTranslationStart, onTranslationEnd, onTranslationError, onPlay, onPause, onStop, onPlayerReady, onPlayerError]);
 
   // ✅ MELHORADO: Conecta automaticamente ao container com verificações robustas
   useEffect(() => {
@@ -335,6 +381,10 @@ export function useVLibrasPlayer(options: UseVLibrasPlayerExtendedOptions = {}):
     isLoading,
     error,
     isReady,
+    
+    // ✅ Novos estados baseados em eventos reais
+    isTranslating,
+    isPlaying,
     
     // Métodos de controle
     translate,

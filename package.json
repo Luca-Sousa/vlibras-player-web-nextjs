@@ -1,7 +1,7 @@
 {
   "name": "vlibras-player-nextjs",
-  "version": "2.1.1",
-  "description": "VLibras Player para Next.js - Biblioteca moderna para tradução de texto em Libras",
+  "version": "2.2.0",
+  "description": "VLibras Player para Next.js - Biblioteca moderna para tradução de texto em Libras com callbacks de estado",
   "main": "./dist/index.js",
   "module": "./dist/index.esm.js",
   "types": "./dist/index.d.ts",

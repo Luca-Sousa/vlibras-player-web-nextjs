@@ -2,7 +2,7 @@
 
 > Biblioteca moderna do VLibras Player para Next.js e React com TypeScript
 
-![Version](https://img.shields.io/badge/version-v2.1.1-blue.svg)
+![Version](https://img.shields.io/badge/version-v2.2.0-blue.svg)
 ![License](https://img.shields.io/badge/license-LGPLv3-blue.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-Ready-blue.svg)
 ![Next.js](https://img.shields.io/badge/Next.js-13+-black.svg)
@@ -26,6 +26,42 @@ O **vlibras-player-nextjs** é uma biblioteca moderna e otimizada do VLibras Pla
 - 🧪 **Totalmente testado**
 - 🔄 **Conexão automática** ao container DOM (v2.1.0+)
 - 🔧 **Sem duplicação** de containers Unity (v2.1.1+)
+- 🎯 **Callbacks de estado** para monitoramento preciso (v2.2.0+)
+
+## 🆕 Novidades v2.2.0 - Callbacks de Estado
+
+A versão **v2.2.0** introduz **callbacks de estado** que permitem monitorar eventos reais do VLibras Player:
+
+```typescript
+const { translate, isTranslating, isPlaying } = useVLibrasPlayer({
+  // ✅ Callbacks de tradução
+  onTranslationStart: () => console.log('🎬 Tradução iniciada'),
+  onTranslationEnd: () => console.log('✅ Tradução finalizada'),
+  onTranslationError: (error) => console.log('❌ Erro:', error),
+  
+  // ✅ Callbacks de reprodução
+  onPlay: () => console.log('▶️ Reprodução iniciada'),
+  onPause: () => console.log('⏸️ Pausado'),
+  onStop: () => console.log('⏹️ Parado'),
+  
+  // ✅ Callbacks do player
+  onPlayerReady: () => console.log('🚀 Player pronto'),
+  onPlayerError: (error) => console.log('💥 Erro no player:', error),
+});
+
+// ✅ Estados precisos baseados em eventos reais
+console.log('Traduzindo:', isTranslating); // true/false preciso
+console.log('Reproduzindo:', isPlaying);   // true/false preciso
+```
+
+**Benefícios dos Callbacks:**
+- 🎯 **Estado preciso** - Conhecimento real do que está acontecendo
+- 🖥️ **UI responsiva** - Interfaces que refletem o estado real
+- 📊 **Analytics** - Logging preciso de eventos
+- 🔄 **Sem timers** - Eventos nativos do Unity WebGL
+- ✅ **Retrocompatível** - API anterior continua funcionando
+
+> 📚 **Documentação completa:** [docs/CALLBACKS_DOCUMENTATION.md](docs/CALLBACKS_DOCUMENTATION.md)
 
 ## 📦 Instalação
 

@@ -2,6 +2,7 @@ import type {
   VLibrasPlayerOptions,
   VLibrasPlayerState,
   VLibrasPlayerEvents,
+  VLibrasPlayerCallbacks,
   TranslationOptions,
   PlayerStatus,
 } from '@/types';
@@ -21,12 +22,25 @@ export class VLibrasPlayer {
   private eventListeners: Map<keyof VLibrasPlayerEvents, Set<Function>> = new Map();
   private container: HTMLElement | null = null;
   private globalGlossLength: number = 0;
+  private callbacks: VLibrasPlayerCallbacks;
 
   constructor(options: VLibrasPlayerOptions = {}) {
     this.options = {
       ...DEFAULT_PLAYER_OPTIONS,
       ...options,
     } as Required<VLibrasPlayerOptions>;
+
+    // Extrair callbacks das opções
+    this.callbacks = {
+      onTranslationStart: options.onTranslationStart,
+      onTranslationEnd: options.onTranslationEnd,
+      onTranslationError: options.onTranslationError,
+      onPlay: options.onPlay,
+      onPause: options.onPause,
+      onStop: options.onStop,
+      onPlayerReady: options.onPlayerReady,
+      onPlayerError: options.onPlayerError,
+    };
 
     this.translator = new VLibrasTranslator(this.options.translatorUrl);
     this.unityManager = new UnityPlayerManager();
@@ -37,9 +51,12 @@ export class VLibrasPlayer {
       translated: false,
       progress: null,
       region: this.options.region,
+      isTranslating: false,
+      isPlaying: false,
     };
 
     this.setupEventListeners();
+    this.setupCallbackIntegration();
   }
 
   /**
@@ -83,10 +100,12 @@ export class VLibrasPlayer {
           this.unityManager.setPlayerReference(player);
           this.state.loaded = true; // ✅ Marcar como carregado
           this.emit('load');
+          this.callbacks.onPlayerReady?.(); // ✅ Callback de player pronto
           resolve();
         },
         onError: (error) => {
           this.emit('error', error);
+          this.callbacks.onPlayerError?.(error); // ✅ Callback de erro no player
           reject(new Error(error));
         },
         onProgress: (progress) => {
@@ -105,7 +124,9 @@ export class VLibrasPlayer {
       throw new Error('Texto não pode estar vazio');
     }
 
+    this.state.isTranslating = true; // ✅ Marcar estado de tradução
     this.emit('translate:start');
+    this.callbacks.onTranslationStart?.(); // ✅ Callback de início de tradução
 
     if (this.state.loaded) {
       this.stop();
@@ -119,9 +140,14 @@ export class VLibrasPlayer {
       
       this.state.gloss = gloss;
       this.play(gloss, { ...options, fromTranslation: true });
+      this.state.isTranslating = false; // ✅ Finalizar estado de tradução
       this.emit('translate:end');
+      this.callbacks.onTranslationEnd?.(); // ✅ Callback de fim de tradução
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Erro na tradução';
+      
+      this.state.isTranslating = false; // ✅ Finalizar estado de tradução em caso de erro
+      this.callbacks.onTranslationError?.(errorMessage); // ✅ Callback de erro na tradução
       
       if (errorMessage === 'timeout_error') {
         this.emit('error', 'timeout_error');
@@ -180,6 +206,8 @@ export class VLibrasPlayer {
    */
   pause(): void {
     this.unityManager.pause();
+    this.state.isPlaying = false; // ✅ Atualizar estado
+    this.callbacks.onPause?.(); // ✅ Callback de pausa
   }
 
   /**
@@ -187,6 +215,8 @@ export class VLibrasPlayer {
    */
   stop(): void {
     this.unityManager.stop();
+    this.state.isPlaying = false; // ✅ Atualizar estado
+    this.callbacks.onStop?.(); // ✅ Callback de parada
   }
 
   /**
@@ -308,6 +338,31 @@ export class VLibrasPlayer {
         }
       });
     }
+  }
+
+  /**
+   * Configura integração dos callbacks com eventos internos
+   */
+  private setupCallbackIntegration(): void {
+    // Integrar callbacks com eventos do Unity Manager
+    this.addEventListener('animation:play', () => {
+      this.state.isPlaying = true;
+      this.callbacks.onPlay?.();
+    });
+
+    this.addEventListener('animation:pause', () => {
+      this.state.isPlaying = false;
+      this.callbacks.onPause?.();
+    });
+
+    this.addEventListener('animation:end', () => {
+      this.state.isPlaying = false;
+      this.callbacks.onStop?.();
+    });
+
+    this.addEventListener('error', (error: string) => {
+      this.callbacks.onPlayerError?.(error);
+    });
   }
 
   /**

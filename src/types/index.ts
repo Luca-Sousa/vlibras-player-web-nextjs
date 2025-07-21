@@ -1,7 +1,27 @@
 import type { CSSProperties } from 'react';
 
+// Callbacks de estado para monitorar eventos do player
+export interface VLibrasPlayerCallbacks {
+  /** Callback executado quando uma tradução é iniciada */
+  onTranslationStart?: () => void;
+  /** Callback executado quando uma tradução é finalizada */
+  onTranslationEnd?: () => void;
+  /** Callback executado quando há erro na tradução */
+  onTranslationError?: (error: string) => void;
+  /** Callback executado quando a reprodução é iniciada */
+  onPlay?: () => void;
+  /** Callback executado quando a reprodução é pausada */
+  onPause?: () => void;
+  /** Callback executado quando a reprodução é interrompida */
+  onStop?: () => void;
+  /** Callback executado quando o player está pronto para uso */
+  onPlayerReady?: () => void;
+  /** Callback executado quando há erro no player */
+  onPlayerError?: (error: string) => void;
+}
+
 // Tipos principais para o VLibras Player
-export interface VLibrasPlayerOptions {
+export interface VLibrasPlayerOptions extends VLibrasPlayerCallbacks {
   /** URL do serviço de tradução */
   translatorUrl?: string;
   /** Caminho para os arquivos Unity WebGL */
@@ -51,9 +71,13 @@ export interface VLibrasPlayerState {
   progress: number | null;
   /** Região atual */
   region: string;
+  /** Se está traduzindo no momento */
+  isTranslating: boolean;
+  /** Se está reproduzindo no momento */
+  isPlaying: boolean;
 }
 
-export type PlayerStatus = 'idle' | 'preparing' | 'playing';
+export type PlayerStatus = 'idle' | 'preparing' | 'playing' | 'translating';
 
 export interface VLibrasPlayerEvents {
   /** Disparado quando o player é carregado */
@@ -157,6 +181,10 @@ export interface UseVLibrasPlayer {
   isLoading: boolean;
   /** Se há erro */
   error: string | null;
+  /** Se está traduzindo no momento (baseado em eventos reais) */
+  isTranslating: boolean;
+  /** Se está reproduzindo no momento (baseado em eventos reais) */
+  isPlaying: boolean;
 }
 
 export interface VLibrasContextValue extends UseVLibrasPlayer {
