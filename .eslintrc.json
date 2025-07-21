@@ -1,0 +1,30 @@
+{
+  "extends": [
+    "eslint:recommended"
+  ],
+  "parser": "@typescript-eslint/parser",
+  "parserOptions": {
+    "ecmaVersion": 2020,
+    "sourceType": "module",
+    "ecmaFeatures": {
+      "jsx": true
+    }
+  },
+  "plugins": ["@typescript-eslint"],
+  "env": {
+    "browser": true,
+    "node": true,
+    "es2020": true
+  },
+  "rules": {
+    "no-unused-vars": "warn",
+    "no-console": "warn",
+    "prefer-const": "error"
+  },
+  "ignorePatterns": [
+    "dist",
+    "build",
+    "node_modules",
+    "*.config.js"
+  ]
+}

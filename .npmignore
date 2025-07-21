@@ -1,0 +1,33 @@
+# Arquivos de desenvolvimento
+src/
+.github/
+examples/
+docs/
+tests/
+__tests__/
+
+# Configurações de desenvolvimento
+tsconfig.json
+rollup.config.js
+jest.config.js
+.eslintrc.js
+.prettierrc
+
+# Build temporários
+*.tsbuildinfo
+.eslintcache
+
+# Logs e cache
+*.log
+node_modules/
+coverage/
+
+# Arquivos de desenvolvimento
+.env*
+.vscode/
+.idea/
+
+# Arquivos de exemplo/demo (serão criados separadamente)
+demo/
+examples/
+README-v2.md
