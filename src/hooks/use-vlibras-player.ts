@@ -3,15 +3,16 @@
 import { useState, useCallback, useRef, useEffect, RefObject } from 'react';
 import type { UseVLibrasPlayer, VLibrasPlayerOptions, VLibrasPlayerCallbacks, TranslationOptions, VLibrasPlayerState } from '../types';
 import { VLibrasPlayer } from '../core/vlibras-player';
+import { UnityStateManager } from '../utils/unity-state-manager';
 
 // Estendendo as opções para incluir containerRef e callbacks
 interface UseVLibrasPlayerExtendedOptions extends VLibrasPlayerOptions, VLibrasPlayerCallbacks {
   containerRef?: RefObject<HTMLElement>;
   autoInit?: boolean;
   onLoad?: () => void;
-  onTranslateStart?: (text: string) => void;
-  onTranslateEnd?: (gloss: string) => void;
-  onError?: (error: string) => void;
+  onTranslateStart?: (_text: string) => void;
+  onTranslateEnd?: (_gloss: string) => void;
+  onError?: (_error: string) => void;
 }
 
 /**
@@ -68,8 +69,10 @@ export function useVLibrasPlayer(options: UseVLibrasPlayerExtendedOptions = {}):
     isPlaying: false, // ✅ Novo estado
   }));
 
-  // Inicializa o player quando autoInit = true
+  // ✅ CRITICAL FIX: Inicialização com cleanup correto
   useEffect(() => {
+    let cleanup: (() => void) | undefined;
+    
     if (autoInit && !playerRef.current) {
       try {
         playerRef.current = new VLibrasPlayer({
@@ -106,7 +109,7 @@ export function useVLibrasPlayer(options: UseVLibrasPlayerExtendedOptions = {}):
             onPlayerError?.(error);
           },
         });
-        setupEventListeners();
+        cleanup = setupEventListeners();
         onLoad?.();
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Erro ao inicializar player';
@@ -116,6 +119,7 @@ export function useVLibrasPlayer(options: UseVLibrasPlayerExtendedOptions = {}):
     }
 
     return () => {
+      cleanup?.(); // ✅ Executar cleanup dos event listeners
       if (playerRef.current) {
         playerRef.current.dispose?.();
         playerRef.current = null;
@@ -123,26 +127,51 @@ export function useVLibrasPlayer(options: UseVLibrasPlayerExtendedOptions = {}):
     };
   }, [autoInit, onLoad, onError, onTranslationStart, onTranslationEnd, onTranslationError, onPlay, onPause, onStop, onPlayerReady, onPlayerError]);
 
-  // ✅ MELHORADO: Conecta automaticamente ao container com verificações robustas
+  // ✅ CRITICAL FIX: Conecta automaticamente ao container com verificações robustas
   useEffect(() => {
+    let cleanup: (() => void) | undefined;
+    
     if (playerRef.current && containerRef?.current && !isReady) {
-      try {
-        playerRef.current.load(containerRef.current);
-        setIsReady(true);
-        setError(null);
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Erro ao conectar container';
-        setError(errorMessage);
-        setIsReady(false);
-        onError?.(errorMessage);
-      }
+      const initializeConnection = async () => {
+        try {
+          setError(null);
+          
+          // Carregar o player no container
+          await playerRef.current!.load(containerRef.current!);
+          
+          // ✅ CRITICAL FIX: Aguardar Unity estar REALMENTE pronto
+          await UnityStateManager.waitForUnity(containerRef.current!);
+          
+          setIsReady(true);
+          onLoad?.(); // ✅ Callback onLoad SOMENTE quando Unity estiver pronto
+          
+        } catch (err) {
+          const errorMessage = err instanceof Error ? err.message : 'Erro ao conectar container';
+          setError(errorMessage);
+          setIsReady(false);
+          onError?.(errorMessage);
+        }
+      };
+      
+      initializeConnection();
     }
-  }, [playerRef.current, containerRef?.current]); // ✅ Remover onError das dependências
+    
+    return () => {
+      cleanup?.(); // ✅ Limpar event listeners quando componente desmonta
+    };
+  }, [playerRef.current, containerRef?.current, onLoad, onError]);
 
   const setupEventListeners = useCallback(() => {
     if (!playerRef.current) return;
 
     const playerInstance = playerRef.current;
+
+    // Função para limpar event listeners
+    const cleanup = () => {
+      if (playerInstance) {
+        playerInstance.removeAllListeners?.();
+      }
+    };
 
     playerInstance.addEventListener('load', () => {
       setPlayer((prev: VLibrasPlayerState) => ({ ...prev, loaded: true }));
@@ -189,11 +218,20 @@ export function useVLibrasPlayer(options: UseVLibrasPlayerExtendedOptions = {}):
       setIsLoading(false);
       onError?.(errorMessage);
     });
+
+    // Retornar função de cleanup
+    return cleanup;
   }, [onTranslateStart, onTranslateEnd, onError]);
 
   const translate = useCallback(async (text: string, options?: TranslationOptions) => {
     if (!playerRef.current) {
       const errorMsg = 'Player não inicializado. Use autoInit: true ou chame connect() primeiro.';
+      setError(errorMsg);
+      throw new Error(errorMsg);
+    }
+
+    if (!isReady) {
+      const errorMsg = 'Player não está pronto. Aguarde o carregamento completo.';
       setError(errorMsg);
       throw new Error(errorMsg);
     }
@@ -206,21 +244,28 @@ export function useVLibrasPlayer(options: UseVLibrasPlayerExtendedOptions = {}):
 
     try {
       setError(null);
+      setIsLoading(true);
+      
+      // ✅ CRITICAL FIX: Aguardar tradução E animação terminarem
       await playerRef.current.translate(text, options);
+      
       setPlayer((prev: VLibrasPlayerState) => ({ 
         ...prev, 
         text, 
         translated: true 
       }));
+      
+      setIsLoading(false);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Erro na tradução';
       setError(errorMessage);
+      setIsLoading(false);
       onError?.(errorMessage);
       throw err;
     }
-  }, [onError]);
+  }, [isReady, onError]);
 
-  const connect = useCallback((container: HTMLElement) => {
+  const connect = useCallback(async (container: HTMLElement) => {
     if (!playerRef.current) {
       const errorMsg = 'Player não inicializado. Use autoInit: true primeiro.';
       setError(errorMsg);
@@ -228,9 +273,18 @@ export function useVLibrasPlayer(options: UseVLibrasPlayerExtendedOptions = {}):
     }
 
     try {
-      playerRef.current.load(container);
-      setIsReady(true);
       setError(null);
+      setIsReady(false);
+      
+      // Carregar o player no container
+      await playerRef.current.load(container);
+      
+      // ✅ CRITICAL FIX: Aguardar Unity estar REALMENTE pronto
+      await UnityStateManager.waitForUnity(container);
+      
+      setIsReady(true);
+      onLoad?.(); // ✅ Callback onLoad SOMENTE quando Unity estiver pronto
+      
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Erro ao conectar container';
       setError(errorMessage);
@@ -238,7 +292,7 @@ export function useVLibrasPlayer(options: UseVLibrasPlayerExtendedOptions = {}):
       onError?.(errorMessage);
       throw err;
     }
-  }, [onError]);
+  }, [onLoad, onError]);
 
   const play = useCallback((gloss?: string, options?: TranslationOptions) => {
     if (!playerRef.current) {

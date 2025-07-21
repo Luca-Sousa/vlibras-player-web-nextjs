@@ -3,11 +3,11 @@ import { UNITY_GAME_OBJECTS } from './config';
 
 export interface UnityPlayerEvents {
   load: () => void;
-  progress: (progress: number) => void;
-  stateChange: (isPlaying: boolean, isPaused: boolean, isLoading: boolean) => void;
-  counterGloss: (counter: number, length: number) => void;
-  getAvatar: (avatar: string) => void;
-  finishWelcome: (finished: boolean) => void;
+  progress: (_progress: number) => void;
+  stateChange: (_isPlaying: boolean, _isPaused: boolean, _isLoading: boolean) => void;
+  counterGloss: (_counter: number, _length: number) => void;
+  getAvatar: (_avatar: string) => void;
+  finishWelcome: (_finished: boolean) => void;
 }
 
 /**
@@ -41,14 +41,14 @@ export class UnityPlayerManager {
    */
   private sendMessage(method: string, params?: any): void {
     if (!this.player) {
-      console.warn('Unity player not initialized');
+      // Unity player not initialized - silently return
       return;
     }
 
     try {
       this.player.SendMessage(UNITY_GAME_OBJECTS.playerManager, method, params);
     } catch (error) {
-      console.error('Error sending message to Unity:', error);
+      // Silently handle Unity communication errors
     }
   }
 
@@ -82,7 +82,7 @@ export class UnityPlayerManager {
    */
   setSpeed(speed: number): void {
     if (speed < 0.5 || speed > 2.0) {
-      console.warn('Speed should be between 0.5 and 2.0');
+      // Speed should be between 0.5 and 2.0 - silently return
       return;
     }
     this.sendMessage('setSlider', speed);
@@ -123,7 +123,7 @@ export class UnityPlayerManager {
    */
   setPersonalization(personalization: string): void {
     if (!this.player) {
-      console.warn('Unity player not initialized');
+      // Unity player not initialized - silently return
       return;
     }
 
@@ -134,7 +134,7 @@ export class UnityPlayerManager {
         personalization
       );
     } catch (error) {
-      console.error('Error setting personalization:', error);
+      // Silently handle personalization errors
     }
   }
 
@@ -177,7 +177,7 @@ export class UnityPlayerManager {
         try {
           (listener as any)(...args);
         } catch (error) {
-          console.error(`Error in event listener for ${event}:`, error);
+          // Silently handle event listener errors
         }
       });
     }
@@ -206,7 +206,7 @@ export class UnityPlayerManager {
       isPaused: string,
       isPlayingIntervalAnimation: string,
       isLoading: string,
-      isRepeatable: string
+      _isRepeatable: string
     ) => {
       this.emit(
         'stateChange',

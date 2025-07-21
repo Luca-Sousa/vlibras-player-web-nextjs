@@ -3,9 +3,9 @@ import type { UnityPlayerInstance } from '@/types';
 export interface UnityLoaderConfig {
   targetPath: string;
   gameContainer: HTMLElement;
-  onSuccess: (player: UnityPlayerInstance) => void;
-  onError: (error: string) => void;
-  onProgress?: (progress: number) => void;
+  onSuccess: (_player: UnityPlayerInstance) => void;
+  onError: (_error: string) => void;
+  onProgress?: (_progress: number) => void;
 }
 
 /**

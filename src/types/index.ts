@@ -7,7 +7,7 @@ export interface VLibrasPlayerCallbacks {
   /** Callback executado quando uma tradução é finalizada */
   onTranslationEnd?: () => void;
   /** Callback executado quando há erro na tradução */
-  onTranslationError?: (error: string) => void;
+  onTranslationError?: (_error: string) => void;
   /** Callback executado quando a reprodução é iniciada */
   onPlay?: () => void;
   /** Callback executado quando a reprodução é pausada */
@@ -17,7 +17,7 @@ export interface VLibrasPlayerCallbacks {
   /** Callback executado quando o player está pronto para uso */
   onPlayerReady?: () => void;
   /** Callback executado quando há erro no player */
-  onPlayerError?: (error: string) => void;
+  onPlayerError?: (_error: string) => void;
 }
 
 // Tipos principais para o VLibras Player
@@ -29,7 +29,7 @@ export interface VLibrasPlayerOptions extends VLibrasPlayerCallbacks {
   /** Callback executado quando o player é carregado */
   onLoad?: () => void;
   /** Função de progresso customizada */
-  progress?: (wrapper: HTMLElement) => any;
+  progress?: (_wrapper: HTMLElement) => any;
   /** Configurações de personalização do avatar */
   personalization?: PersonalizationConfig;
   /** Região para dicionário de sinais */
@@ -93,25 +93,25 @@ export interface VLibrasPlayerEvents {
   /** Disparado quando a animação termina */
   'animation:end': () => void;
   /** Disparado durante o progresso da animação */
-  'animation:progress': (progress: number) => void;
+  'animation:progress': (_progress: number) => void;
   /** Disparado quando a glosa inicia */
   'gloss:start': () => void;
   /** Disparado quando a glosa termina */
-  'gloss:end': (length: number) => void;
+  'gloss:end': (_length: number) => void;
   /** Disparado quando há erro */
-  'error': (error: string) => void;
+  'error': (_error: string) => void;
   /** Disparado quando o avatar é alterado */
-  'avatar:change': (avatar: string) => void;
+  'avatar:change': (_avatar: string) => void;
   /** Disparado quando a apresentação de boas-vindas inicia */
   'welcome:start': () => void;
   /** Disparado quando a apresentação de boas-vindas termina */
-  'welcome:end': (finished: boolean) => void;
+  'welcome:end': (_finished: boolean) => void;
   /** Disparado com informações da glosa */
-  'gloss:info': (counter: number, length: number) => void;
+  'gloss:info': (_counter: number, _length: number) => void;
 }
 
 export interface UnityPlayerInstance {
-  SendMessage: (gameObject: string, method: string, params?: any) => void;
+  SendMessage: (_gameObject: string, _method: string, _params?: any) => void;
 }
 
 export interface VLibrasConfig {
@@ -139,7 +139,7 @@ export interface VLibrasPlayerProps extends VLibrasPlayerOptions {
   onPlay?: () => void;
   onPause?: () => void;
   onEnd?: () => void;
-  onError?: (error: string) => void;
+  onError?: (_error: string) => void;
 }
 
 export interface VLibrasWidgetProps extends VLibrasPlayerProps {
@@ -158,9 +158,9 @@ export interface UseVLibrasPlayer {
   /** Instância do player */
   player: VLibrasPlayerState;
   /** Função para traduzir texto */
-  translate: (text: string, options?: TranslationOptions) => Promise<void>;
+  translate: (_text: string, _options?: TranslationOptions) => Promise<void>;
   /** Função para reproduzir */
-  play: (gloss?: string, options?: TranslationOptions) => void;
+  play: (_gloss?: string, _options?: TranslationOptions) => void;
   /** Função para pausar */
   pause: () => void;
   /** Função para parar */
@@ -168,15 +168,15 @@ export interface UseVLibrasPlayer {
   /** Função para repetir */
   repeat: () => void;
   /** Função para definir velocidade */
-  setSpeed: (speed: number) => void;
+  setSpeed: (_speed: number) => void;
   /** Função para alternar legendas */
   toggleSubtitle: () => void;
   /** Função para trocar avatar */
-  changeAvatar: (avatarName: string) => void;
+  changeAvatar: (_avatarName: string) => void;
   /** Função para definir região */
-  setRegion: (region: 'BR' | 'PT') => void;
+  setRegion: (_region: 'BR' | 'PT') => void;
   /** Função para conectar manualmente a um container */
-  connect: (container: HTMLElement) => void;
+  connect: (_container: HTMLElement) => void;
   /** Se está carregando */
   isLoading: boolean;
   /** Se há erro */
@@ -195,9 +195,9 @@ export interface VLibrasContextValue extends UseVLibrasPlayer {
 // Ref type para o componente VLibrasPlayer
 export interface VLibrasPlayerRef {
   /** Traduzir texto para Libras */
-  translate: (text: string, options?: TranslationOptions) => Promise<void>;
+  translate: (_text: string, _options?: TranslationOptions) => Promise<void>;
   /** Tocar animação com glosa */
-  play: (gloss?: string, options?: TranslationOptions) => void;
+  play: (_gloss?: string, _options?: TranslationOptions) => void;
   /** Pausar animação */
   pause: () => void;
   /** Parar animação */
@@ -205,13 +205,13 @@ export interface VLibrasPlayerRef {
   /** Repetir animação */
   repeat: () => void;
   /** Definir velocidade de reprodução */
-  setSpeed: (speed: number) => void;
+  setSpeed: (_speed: number) => void;
   /** Alternar legendas */
   toggleSubtitle: () => void;
   /** Trocar avatar */
-  changeAvatar: (avatarName: string) => void;
+  changeAvatar: (_avatarName: string) => void;
   /** Definir região */
-  setRegion: (region: 'BR' | 'PT') => void;
+  setRegion: (_region: 'BR' | 'PT') => void;
   /** Obter estado atual */
   getState: () => VLibrasPlayerState;
 }

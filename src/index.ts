@@ -7,6 +7,9 @@ export { VLibrasTranslator } from './core/translator';
 export { UnityPlayerManager } from './core/unity-player-manager';
 export { UnityLoader } from './core/unity-loader';
 
+// Utilitários
+export { UnityStateManager } from './utils/unity-state-manager';
+
 // Configurações
 export { defaultConfig, PLAYER_STATUSES, DEFAULT_PLAYER_OPTIONS } from './core/config';
 
@@ -14,6 +17,7 @@ export { defaultConfig, PLAYER_STATUSES, DEFAULT_PLAYER_OPTIONS } from './core/c
 export type {
   VLibrasPlayerOptions,
   VLibrasPlayerState,
+  VLibrasPlayerCallbacks,
   UseVLibrasPlayer,
   TranslationOptions,
   PersonalizationConfig,
@@ -23,4 +27,4 @@ export type {
 } from './types';
 
 // Versão da biblioteca
-export const VERSION = '2.0.0';
+export const VERSION = '2.3.0';

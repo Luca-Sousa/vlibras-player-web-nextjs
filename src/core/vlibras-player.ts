@@ -9,6 +9,7 @@ import type {
 import { VLibrasTranslator } from './translator';
 import { UnityPlayerManager } from './unity-player-manager';
 import { UnityLoader } from './unity-loader';
+import { UnityStateManager } from '../utils/unity-state-manager';
 import { defaultConfig, PLAYER_STATUSES, DEFAULT_PLAYER_OPTIONS } from './config';
 
 /**
@@ -74,20 +75,26 @@ export class VLibrasPlayer {
     // ✅ CORREÇÃO: Verificar se já existe container
     const existingContainer = wrapper.querySelector('.vlibras-unity-container') as HTMLElement;
     
-    if (existingContainer && this.state.loaded) {
-      // ✅ Reutilizar container existente se já carregado
+    if (existingContainer && this.state.loaded && UnityStateManager.isUnityReady(existingContainer)) {
+      // ✅ Reutilizar container existente se já carregado E Unity está pronto
       this.container = existingContainer;
       this.emit('load');
+      this.callbacks.onPlayerReady?.(); // ✅ Callback de player pronto
       return Promise.resolve();
     }
 
     // ✅ CORREÇÃO: Limpar containers anteriores se existirem
     const oldContainers = wrapper.querySelectorAll('[id*="vlibras-container"], [id*="vlibras-game-container"]');
-    oldContainers.forEach(container => container.remove());
+    oldContainers.forEach(container => {
+      const containerId = container.id;
+      UnityStateManager.unregisterUnityInstance(containerId);
+      container.remove();
+    });
 
     // ✅ Criar novo container apenas se necessário
     this.container = document.createElement('div');
-    this.container.setAttribute('id', `vlibras-container-${this.options.region || 'default'}`);
+    const containerId = `vlibras-container-${this.options.region || 'default'}-${Date.now()}`;
+    this.container.setAttribute('id', containerId);
     this.container.classList.add('vlibras-unity-container');
 
     wrapper.appendChild(this.container);
@@ -96,12 +103,26 @@ export class VLibrasPlayer {
       UnityLoader.loadPlayer({
         targetPath: this.options.targetPath,
         gameContainer: this.container!,
-        onSuccess: (player) => {
-          this.unityManager.setPlayerReference(player);
-          this.state.loaded = true; // ✅ Marcar como carregado
-          this.emit('load');
-          this.callbacks.onPlayerReady?.(); // ✅ Callback de player pronto
-          resolve();
+        onSuccess: async (player) => {
+          try {
+            this.unityManager.setPlayerReference(player);
+            
+            // ✅ Registrar instância Unity para monitoramento
+            UnityStateManager.registerUnityInstance(containerId, player);
+            
+            // ✅ CRITICAL FIX: Aguardar Unity estar REALMENTE pronto
+            await UnityStateManager.waitForUnity(this.container!);
+            
+            this.state.loaded = true; // ✅ Marcar como carregado APENAS após Unity pronto
+            this.emit('load');
+            this.callbacks.onPlayerReady?.(); // ✅ Callback de player pronto
+            resolve();
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Erro ao aguardar Unity carregar';
+            this.emit('error', errorMessage);
+            this.callbacks.onPlayerError?.(errorMessage);
+            reject(new Error(errorMessage));
+          }
         },
         onError: (error) => {
           this.emit('error', error);
@@ -124,6 +145,11 @@ export class VLibrasPlayer {
       throw new Error('Texto não pode estar vazio');
     }
 
+    // ✅ CRITICAL FIX: Verificar se Unity está realmente pronto
+    if (!this.state.loaded || !UnityStateManager.isUnityReady(this.container!)) {
+      throw new Error('Player não está pronto. Aguarde o carregamento completo.');
+    }
+
     this.state.isTranslating = true; // ✅ Marcar estado de tradução
     this.emit('translate:start');
     this.callbacks.onTranslationStart?.(); // ✅ Callback de início de tradução
@@ -140,6 +166,12 @@ export class VLibrasPlayer {
       
       this.state.gloss = gloss;
       this.play(gloss, { ...options, fromTranslation: true });
+      
+      // ✅ CRITICAL FIX: Aguardar animação terminar REALMENTE
+      if (this.container) {
+        await UnityStateManager.waitForAnimationEnd(this.container);
+      }
+      
       this.state.isTranslating = false; // ✅ Finalizar estado de tradução
       this.emit('translate:end');
       this.callbacks.onTranslationEnd?.(); // ✅ Callback de fim de tradução
@@ -158,6 +190,7 @@ export class VLibrasPlayer {
       // Em caso de erro, tenta reproduzir o texto em maiúsculas
       this.play(text.toUpperCase());
       this.emit('translate:end');
+      this.callbacks.onTranslationEnd?.(); // ✅ Callback mesmo com erro
     }
   }
 
@@ -288,6 +321,13 @@ export class VLibrasPlayer {
     if (listeners) {
       listeners.delete(listener);
     }
+  }
+
+  /**
+   * ✅ NOVO: Remove todos os listeners de eventos
+   */
+  removeAllListeners(): void {
+    this.eventListeners.clear();
   }
 
   /**

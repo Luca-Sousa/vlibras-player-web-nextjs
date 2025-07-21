@@ -2,7 +2,7 @@
 
 > Biblioteca moderna do VLibras Player para Next.js e React com TypeScript
 
-![Version](https://img.shields.io/badge/version-v2.2.0-blue.svg)
+![Version](https://img.shields.io/badge/version-v2.3.0-blue.svg)
 ![License](https://img.shields.io/badge/license-LGPLv3-blue.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-Ready-blue.svg)
 ![Next.js](https://img.shields.io/badge/Next.js-13+-black.svg)
@@ -27,8 +27,27 @@ O **vlibras-player-nextjs** é uma biblioteca moderna e otimizada do VLibras Pla
 - 🔄 **Conexão automática** ao container DOM (v2.1.0+)
 - 🔧 **Sem duplicação** de containers Unity (v2.1.1+)
 - 🎯 **Callbacks de estado** para monitoramento preciso (v2.2.0+)
+- 🔄 **Gerenciamento Unity corrigido** com aguardo real de prontidão (v2.3.0+)
 
-## 🆕 Novidades v2.2.0 - Callbacks de Estado
+## 🆕 Novidades v2.3.0 - Correções Críticas de Estado
+
+A versão **v2.3.0** corrige **problemas críticos** de gerenciamento de estado Unity:
+
+- ✅ **UnityStateManager**: Nova classe para controle preciso do estado Unity WebGL
+- ✅ **Aguardo de Prontidão**: Métodos aguardam automaticamente Unity estar pronto
+- ✅ **Callbacks Funcionais**: Sistema de callbacks totalmente corrigido
+- ✅ **Detecção de Animação**: Aguarda conclusão real das animações
+- ✅ **Estados Confiáveis**: `isReady` reflete o estado real do Unity
+- ✅ **Debugging**: Informações detalhadas para desenvolvimento
+
+### ⚠️ Problemas Corrigidos na v2.3.0:
+
+1. **`isReady: true` antes do Unity estar pronto** → ✅ Corrigido
+2. **Callbacks `onLoad` não funcionando** → ✅ Corrigido  
+3. **Tradução não aguardando animação** → ✅ Corrigido
+4. **Estados inconsistentes** → ✅ Corrigido
+
+## 🆕 v2.2.0 - Callbacks de Estado (Base)
 
 A versão **v2.2.0** introduz **callbacks de estado** que permitem monitorar eventos reais do VLibras Player:
 
@@ -73,7 +92,39 @@ yarn add vlibras-player-nextjs
 pnpm add vlibras-player-nextjs
 ```
 
-## 🚀 Uso Básico
+## � Debugging e Estado Unity (v2.3.0)
+
+Para verificar o estado real do Unity e debugar problemas:
+
+```tsx
+'use client';
+import { useVLibrasPlayer, UnityStateManager } from 'vlibras-player-nextjs';
+
+export default function DebugComponent() {
+  const { player, isReady, connect } = useVLibrasPlayer({
+    onLoad: () => console.log('✅ Unity realmente pronto!'),
+  });
+
+  const showDebugInfo = () => {
+    const debugInfo = UnityStateManager.getDebugInfo();
+    console.log('🔍 Debug Unity:', debugInfo);
+    
+    // Verificação manual do estado
+    console.log('🔍 Unity Ready:', UnityStateManager.isUnityReady());
+    console.log('🔍 Animation Playing:', UnityStateManager.isAnimationPlaying());
+  };
+
+  return (
+    <div>
+      <button onClick={showDebugInfo}>Ver Debug Info</button>
+      <div id="vlibras-player-container"></div>
+      <div>Estado: {isReady ? '✅ Pronto' : '⏳ Carregando'}</div>
+    </div>
+  );
+}
+```
+
+## �🚀 Uso Básico
 
 ### Hook React (Recomendado) - v2.1.1+
 
