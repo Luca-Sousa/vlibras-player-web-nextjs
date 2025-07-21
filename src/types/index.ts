@@ -151,6 +151,8 @@ export interface UseVLibrasPlayer {
   changeAvatar: (avatarName: string) => void;
   /** Função para definir região */
   setRegion: (region: 'BR' | 'PT') => void;
+  /** Função para conectar manualmente a um container */
+  connect: (container: HTMLElement) => void;
   /** Se está carregando */
   isLoading: boolean;
   /** Se há erro */
