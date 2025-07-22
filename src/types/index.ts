@@ -1,4 +1,18 @@
-import type { CSSProperties } from 'react';
+import type { CSSProperties, RefObject } from 'react';
+
+// Interface para informações de debug do Unity
+export interface UnityDebugInfo {
+  hasUnityInstance: boolean;
+  hasModule: boolean;
+  moduleReady: boolean;
+  hasSendMessage: boolean;
+  hasCanvas: boolean;
+  canvasSize: string;
+  isReady: boolean;
+  isAnimationPlaying: boolean;
+  isAnimationComplete: boolean;
+  registeredInstances: number;
+}
 
 // Callbacks de estado para monitorar eventos do player
 export interface VLibrasPlayerCallbacks {
@@ -12,6 +26,10 @@ export interface VLibrasPlayerCallbacks {
   onPlay?: () => void;
   /** Callback executado quando a reprodução é pausada */
   onPause?: () => void;
+  /** Callback executado quando a reprodução é retomada */
+  onResume?: () => void;
+  /** Callback executado quando a reprodução é reiniciada */
+  onRestart?: () => void;
   /** Callback executado quando a reprodução é interrompida */
   onStop?: () => void;
   /** Callback executado quando o player está pronto para uso */
@@ -90,6 +108,10 @@ export interface VLibrasPlayerEvents {
   'animation:play': () => void;
   /** Disparado quando a animação é pausada */
   'animation:pause': () => void;
+  /** Disparado quando a animação é retomada após pausa */
+  'animation:resume': () => void;
+  /** Disparado quando a animação é reiniciada */
+  'animation:restart': () => void;
   /** Disparado quando a animação termina */
   'animation:end': () => void;
   /** Disparado durante o progresso da animação */
@@ -163,6 +185,10 @@ export interface UseVLibrasPlayer {
   play: (_gloss?: string, _options?: TranslationOptions) => void;
   /** Função para pausar */
   pause: () => void;
+  /** Função para retomar após pausa */
+  resume: () => void;
+  /** Função para reiniciar animação atual */
+  restart: () => void;
   /** Função para parar */
   stop: () => void;
   /** Função para repetir */
@@ -185,6 +211,32 @@ export interface UseVLibrasPlayer {
   isTranslating: boolean;
   /** Se está reproduzindo no momento (baseado em eventos reais) */
   isPlaying: boolean;
+  /** Se o player está pronto para uso */
+  isReady: boolean;
+  /** Alias para isReady (compatibilidade) */
+  isPlayerReady: boolean;
+  /** Se a animação está pausada */
+  isPaused: boolean;
+  /** Texto atual sendo traduzido */
+  currentText: string;
+  /** Log de eventos do player */
+  eventLog: Array<{ timestamp: string; message: string; type: string }>;
+  /** Função para inicializar o player */
+  initializePlayer: () => Promise<void>;
+  /** Função para traduzir texto (nova interface) */
+  translateText: (_text: string) => Promise<void>;
+  /** Função para limpar logs de eventos */
+  clearLogs: () => void;
+  /** Se pode pausar no momento */
+  canPause: boolean;
+  /** Se pode retomar no momento */
+  canResume: boolean;
+  /** Se pode parar no momento */
+  canStop: boolean;
+  /** Se pode reiniciar no momento */
+  canRestart: boolean;
+  /** Referência do container (opcional) */
+  containerRef?: RefObject<HTMLElement>;
 }
 
 export interface VLibrasContextValue extends UseVLibrasPlayer {
@@ -200,6 +252,10 @@ export interface VLibrasPlayerRef {
   play: (_gloss?: string, _options?: TranslationOptions) => void;
   /** Pausar animação */
   pause: () => void;
+  /** Retomar animação pausada */
+  resume: () => void;
+  /** Reiniciar animação atual */
+  restart: () => void;
   /** Parar animação */
   stop: () => void;
   /** Repetir animação */

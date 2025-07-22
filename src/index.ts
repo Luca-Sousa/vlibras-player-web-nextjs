@@ -24,7 +24,8 @@ export type {
   PlayerStatus,
   UnityPlayerInstance,
   VLibrasConfig,
+  UnityDebugInfo,
 } from './types';
 
 // Versão da biblioteca
-export const VERSION = '2.3.0';
+export const VERSION = '2.4.1';

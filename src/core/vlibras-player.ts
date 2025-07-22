@@ -24,6 +24,8 @@ export class VLibrasPlayer {
   private container: HTMLElement | null = null;
   private globalGlossLength: number = 0;
   private callbacks: VLibrasPlayerCallbacks;
+  private isInTranslation: boolean = false; // 🔥 Flag para rastrear se estamos em uma tradução
+  private isRestarting: boolean = false; // 🔥 NOVO: Flag para rastrear se estamos reiniciando
 
   constructor(options: VLibrasPlayerOptions = {}) {
     this.options = {
@@ -38,6 +40,8 @@ export class VLibrasPlayer {
       onTranslationError: options.onTranslationError,
       onPlay: options.onPlay,
       onPause: options.onPause,
+      onResume: options.onResume,
+      onRestart: options.onRestart,
       onStop: options.onStop,
       onPlayerReady: options.onPlayerReady,
       onPlayerError: options.onPlayerError,
@@ -72,61 +76,81 @@ export class VLibrasPlayer {
       throw new Error('Navegador não suporta WebGL');
     }
 
-    // ✅ CORREÇÃO: Verificar se já existe container
-    const existingContainer = wrapper.querySelector('.vlibras-unity-container') as HTMLElement;
+    // ✅ CORREÇÃO ORIGINAL: Implementar sequência exata do VLibras original
     
-    if (existingContainer && this.state.loaded && UnityStateManager.isUnityReady(existingContainer)) {
-      // ✅ Reutilizar container existente se já carregado E Unity está pronto
-      this.container = existingContainer;
-      this.emit('load');
-      this.callbacks.onPlayerReady?.(); // ✅ Callback de player pronto
-      return Promise.resolve();
-    }
-
-    // ✅ CORREÇÃO: Limpar containers anteriores se existirem
-    const oldContainers = wrapper.querySelectorAll('[id*="vlibras-container"], [id*="vlibras-game-container"]');
+    // Limpar containers anteriores se existirem
+    const oldContainers = wrapper.querySelectorAll('[id*="vlibras-container"], [id*="gameContainer"]');
     oldContainers.forEach(container => {
       const containerId = container.id;
       UnityStateManager.unregisterUnityInstance(containerId);
       container.remove();
     });
 
-    // ✅ Criar novo container apenas se necessário
+    // ✅ CRITICAL FIX: Criar gameContainer com ID específico que Unity espera
     this.container = document.createElement('div');
-    const containerId = `vlibras-container-${this.options.region || 'default'}-${Date.now()}`;
-    this.container.setAttribute('id', containerId);
-    this.container.classList.add('vlibras-unity-container');
+    this.container.setAttribute('id', 'gameContainer'); // ✅ Unity original usa gameContainer
+    this.container.classList.add('emscripten', 'vlibras-unity-container');
 
     wrapper.appendChild(this.container);
 
     return new Promise((resolve, reject) => {
+      // ✅ CRITICAL FIX: Implementar window.onLoadPlayer como no original
+      const originalOnLoadPlayer = (window as any).onLoadPlayer;
+      
+      (window as any).onLoadPlayer = () => {
+        try {
+          // ✅ ORIGINAL SEQUENCE: Exatamente como no Player.js original
+          this.state.loaded = true;
+          this.emit('load');
+          
+          // ✅ CRITICAL FIX: Inicializar animações aleatórias (estava faltando!)
+          this.unityManager.initRandomAnimationsProcess();
+          
+          // ✅ ORIGINAL FIX: setBaseUrl SEM região como no original
+          this.unityManager.setBaseUrl(defaultConfig.dictionaryUrl);
+          
+          // ✅ ORIGINAL: Chamar onLoad callback ou play automático
+          if (this.options.onLoad) {
+            this.options.onLoad();
+          } else {
+            // ✅ ORIGINAL: Play automático de boas-vindas com null
+            this.play(null, { fromTranslation: true });
+          }
+          
+          this.callbacks.onPlayerReady?.();
+          resolve();
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Erro na inicialização do player';
+          this.emit('error', errorMessage);
+          this.callbacks.onPlayerError?.(errorMessage);
+          reject(new Error(errorMessage));
+        } finally {
+          // Restaurar callback original se existia
+          if (originalOnLoadPlayer) {
+            (window as any).onLoadPlayer = originalOnLoadPlayer;
+          }
+        }
+      };
+
+      // ✅ Usar UnityLoader original
       UnityLoader.loadPlayer({
         targetPath: this.options.targetPath,
         gameContainer: this.container!,
-        onSuccess: async (player) => {
-          try {
-            this.unityManager.setPlayerReference(player);
-            
-            // ✅ Registrar instância Unity para monitoramento
-            UnityStateManager.registerUnityInstance(containerId, player);
-            
-            // ✅ CRITICAL FIX: Aguardar Unity estar REALMENTE pronto
-            await UnityStateManager.waitForUnity(this.container!);
-            
-            this.state.loaded = true; // ✅ Marcar como carregado APENAS após Unity pronto
-            this.emit('load');
-            this.callbacks.onPlayerReady?.(); // ✅ Callback de player pronto
-            resolve();
-          } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Erro ao aguardar Unity carregar';
-            this.emit('error', errorMessage);
-            this.callbacks.onPlayerError?.(errorMessage);
-            reject(new Error(errorMessage));
-          }
+        onSuccess: (player) => {
+          // ✅ CRITICAL FIX: Apenas configurar referência, NÃO marcar como pronto
+          this.unityManager.setPlayerReference(player);
+          UnityStateManager.registerUnityInstance('gameContainer', player);
+          
+          // ✅ O window.onLoadPlayer será chamado pelo Unity quando estiver realmente pronto
         },
         onError: (error) => {
+          // Restaurar callback original se existia
+          if (originalOnLoadPlayer) {
+            (window as any).onLoadPlayer = originalOnLoadPlayer;
+          }
+          
           this.emit('error', error);
-          this.callbacks.onPlayerError?.(error); // ✅ Callback de erro no player
+          this.callbacks.onPlayerError?.(error);
           reject(new Error(error));
         },
         onProgress: (progress) => {
@@ -138,22 +162,23 @@ export class VLibrasPlayer {
   }
 
   /**
-   * Traduz um texto para Libras
+   * Traduz um texto para Libras - EXATAMENTE como no código original
    */
   async translate(text: string, options: TranslationOptions = {}): Promise<void> {
     if (!text || text.trim().length === 0) {
       throw new Error('Texto não pode estar vazio');
     }
 
-    // ✅ CRITICAL FIX: Verificar se Unity está realmente pronto
-    if (!this.state.loaded || !UnityStateManager.isUnityReady(this.container!)) {
+    if (!this.state.loaded) {
       throw new Error('Player não está pronto. Aguarde o carregamento completo.');
     }
 
-    this.state.isTranslating = true; // ✅ Marcar estado de tradução
+    // ✅ ORIGINAL: Emitir translate:start imediatamente
     this.emit('translate:start');
-    this.callbacks.onTranslationStart?.(); // ✅ Callback de início de tradução
+    this.callbacks.onTranslationStart?.();
+    this.isInTranslation = true; // 🔥 Marcar que estamos em uma tradução
 
+    // ✅ ORIGINAL: Parar reprodução atual se estiver carregado
     if (this.state.loaded) {
       this.stop();
     }
@@ -164,22 +189,26 @@ export class VLibrasPlayer {
       const domain = typeof window !== 'undefined' ? window.location.hostname : '';
       const gloss = await this.translator.translate(text, domain);
       
-      this.state.gloss = gloss;
-      this.play(gloss, { ...options, fromTranslation: true });
-      
-      // ✅ CRITICAL FIX: Aguardar animação terminar REALMENTE
-      if (this.container) {
-        await UnityStateManager.waitForAnimationEnd(this.container);
+      if (!gloss) {
+        // ✅ ORIGINAL: Em caso de erro, finalizar tradução
+        this.isInTranslation = false; // 🔥 Finalizar flag de tradução
+        this.emit('translate:end');
+        this.callbacks.onTranslationEnd?.();
+        return;
       }
+
+      this.state.gloss = gloss;
       
-      this.state.isTranslating = false; // ✅ Finalizar estado de tradução
-      this.emit('translate:end');
-      this.callbacks.onTranslationEnd?.(); // ✅ Callback de fim de tradução
+      // ✅ CRITICAL FIX: Seguir EXATAMENTE o código original
+      this.play(gloss, { ...options, fromTranslation: true, isEnabledStats: options.isEnabledStats });
+      
+      // 🔥 REMOVED: Não emitir translate:end aqui!
+      // Agora será emitido quando animation:end for disparado
+      
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Erro na tradução';
       
-      this.state.isTranslating = false; // ✅ Finalizar estado de tradução em caso de erro
-      this.callbacks.onTranslationError?.(errorMessage); // ✅ Callback de erro na tradução
+      this.callbacks.onTranslationError?.(errorMessage);
       
       if (errorMessage === 'timeout_error') {
         this.emit('error', 'timeout_error');
@@ -187,17 +216,17 @@ export class VLibrasPlayer {
         this.emit('error', errorMessage);
       }
       
-      // Em caso de erro, tenta reproduzir o texto em maiúsculas
+      // ✅ ORIGINAL: Em caso de erro, reproduzir texto em maiúsculas
       this.play(text.toUpperCase());
+      
       this.emit('translate:end');
-      this.callbacks.onTranslationEnd?.(); // ✅ Callback mesmo com erro
     }
   }
 
   /**
    * Reproduz uma glosa ou continua a reprodução
    */
-  play(gloss?: string, options: TranslationOptions = {}): void {
+  play(gloss?: string | null, options: TranslationOptions = {}): void {
     const { fromTranslation = false, isEnabledStats = true } = options;
 
     // Configura URL do dicionário baseado nas estatísticas
@@ -239,8 +268,42 @@ export class VLibrasPlayer {
    */
   pause(): void {
     this.unityManager.pause();
-    this.state.isPlaying = false; // ✅ Atualizar estado
-    this.callbacks.onPause?.(); // ✅ Callback de pausa
+    // 🔥 CORREÇÃO: Não chamar callback aqui - será chamado pelo evento animation:pause
+  }
+
+  /**
+   * ✅ NOVO: Retoma a reprodução pausada
+   */
+  resume(): void {
+    this.unityManager.resume();
+    // 🔥 CORREÇÃO: Não chamar callback aqui - será chamado pelo evento animation:play
+  }
+
+  /**
+   * ✅ NOVO: Reinicia a animação atual (mesmo se estiver rodando)
+   */
+  restart(): void {
+    if (!this.state.loaded || !this.state.gloss) {
+      // Não há glosa para reiniciar
+      return;
+    }
+
+    // 🔥 CORREÇÃO: Marcar que estamos reiniciando
+    this.isRestarting = true;
+    
+    // Emitir apenas o evento - o callback será chamado pelo listener
+    this.emit('animation:restart');
+    
+    // Parar e reproduzir novamente a glosa atual
+    this.unityManager.stop();
+    
+    // Pequeno delay para garantir que o stop foi processado
+    setTimeout(() => {
+      if (this.state.gloss && this.isRestarting) {
+        this.unityManager.play(this.state.gloss);
+        this.isRestarting = false; // Reset flag após iniciar
+      }
+    }, 100);
   }
 
   /**
@@ -248,8 +311,13 @@ export class VLibrasPlayer {
    */
   stop(): void {
     this.unityManager.stop();
-    this.state.isPlaying = false; // ✅ Atualizar estado
-    this.callbacks.onStop?.(); // ✅ Callback de parada
+    // 🔥 CORREÇÃO: Não chamar callback aqui - será chamado pelo evento animation:end
+    
+    // 🔥 Resetar flag de tradução se necessário
+    if (this.isInTranslation) {
+      this.isInTranslation = false;
+      // Note: Não emitir translate:end aqui pois stop() pode ser chamado manualmente
+    }
   }
 
   /**
@@ -384,7 +452,8 @@ export class VLibrasPlayer {
    * Configura integração dos callbacks com eventos internos
    */
   private setupCallbackIntegration(): void {
-    // Integrar callbacks com eventos do Unity Manager
+    // 🔥 CORREÇÃO: Integrar callbacks APENAS com eventos, evitando duplicação
+    
     this.addEventListener('animation:play', () => {
       this.state.isPlaying = true;
       this.callbacks.onPlay?.();
@@ -393,6 +462,16 @@ export class VLibrasPlayer {
     this.addEventListener('animation:pause', () => {
       this.state.isPlaying = false;
       this.callbacks.onPause?.();
+    });
+
+    this.addEventListener('animation:resume', () => {
+      this.state.isPlaying = true;
+      this.callbacks.onResume?.();
+    });
+
+    this.addEventListener('animation:restart', () => {
+      this.state.isPlaying = true;
+      this.callbacks.onRestart?.();
     });
 
     this.addEventListener('animation:end', () => {
@@ -424,15 +503,40 @@ export class VLibrasPlayer {
       this.emit('animation:progress', progress);
     });
 
+    let wasPaused = false; // 🔥 CORREÇÃO: Flag para detectar se estava pausado
+
     this.unityManager.addEventListener('stateChange', (isPlaying, isPaused, isLoading) => {
       if (isPaused) {
+        wasPaused = true; // 🔥 Marcar que foi pausado
         this.emit('animation:pause');
       } else if (isPlaying && !isPaused) {
-        this.emit('animation:play');
+        // 🔥 CORREÇÃO: Distinguir entre play inicial, resume e restart
+        if (this.isRestarting) {
+          // Não emitir evento aqui, já foi emitido no método restart()
+          this.isRestarting = false;
+        } else if (wasPaused) {
+          this.emit('animation:resume'); // ✅ Retomar após pausa
+          wasPaused = false; // Reset flag
+        } else {
+          this.emit('animation:play'); // ✅ Play inicial
+        }
         this.changeStatus(PLAYER_STATUSES.playing);
       } else if (!isPlaying && !isLoading) {
-        this.emit('animation:end');
+        wasPaused = false; // Reset flag quando termina
+        
+        // 🔥 CORREÇÃO: Não emitir animation:end se estivermos reiniciando
+        if (!this.isRestarting) {
+          this.emit('animation:end');
+        }
+        
         this.changeStatus(PLAYER_STATUSES.idle);
+        
+        // 🔥 GENIUS LOGIC: Emitir translate:end quando animação terminar durante uma tradução!
+        if (this.isInTranslation && !this.isRestarting) {
+          this.isInTranslation = false;
+          this.emit('translate:end');
+          this.callbacks.onTranslationEnd?.();
+        }
       }
     });
 

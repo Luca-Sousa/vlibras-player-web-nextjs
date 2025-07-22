@@ -2,7 +2,7 @@
 
 > Biblioteca moderna do VLibras Player para Next.js e React com TypeScript
 
-![Version](https://img.shields.io/badge/version-v2.3.0-blue.svg)
+![Version](https://img.shields.io/badge/version-v2.4.1-blue.svg)
 ![License](https://img.shields.io/badge/license-LGPLv3-blue.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-Ready-blue.svg)
 ![Next.js](https://img.shields.io/badge/Next.js-13+-black.svg)
@@ -29,7 +29,55 @@ O **vlibras-player-nextjs** é uma biblioteca moderna e otimizada do VLibras Pla
 - 🎯 **Callbacks de estado** para monitoramento preciso (v2.2.0+)
 - 🔄 **Gerenciamento Unity corrigido** com aguardo real de prontidão (v2.3.0+)
 
-## 🆕 Novidades v2.3.0 - Correções Críticas de Estado
+## 🆕 Novidades v2.5.0 - Hook com Melhores Práticas React! ⚛️
+
+A versão **v2.5.0** traz o **hook redesenhado seguindo as melhores práticas do React**:
+
+### 🏗️ Arquitetura Moderna com useReducer
+- ✅ **Estado Centralizado**: Gerenciamento com `useReducer` para maior previsibilidade
+- ✅ **Memoização Inteligente**: Callbacks e objetos memoizados para performance otimizada
+- ✅ **Estados Derivados**: `canTranslate`, `canPause`, `canResume`, `canStop`, `canRestart`
+- ✅ **Tratamento de Erros Robusto**: Distinção entre erros fatais e avisos
+- ✅ **Debouncing**: Prevenção de traduções muito rápidas consecutivas
+
+### 🎯 Interface Organizadas em Grupos
+```tsx
+const player = useVLibrasPlayer({ containerRef, autoInit: true });
+
+// Controles agrupados
+player.controls.play();
+player.controls.pause();
+
+// Configurações agrupadas  
+player.settings.setSpeed(1.5);
+player.settings.setRegion('BR');
+
+// Utilitários agrupados
+player.utils.clearWarnings();
+player.utils.retry();
+```
+
+### 🚀 Funcionalidades Avançadas
+- � **Retry Automático**: Tentativas de reconexão configuráveis
+- ⏱️ **Debouncing**: Controle de frequência de traduções
+- 🛑 **AbortController**: Cancelamento de operações assíncronas
+- 🧹 **Cleanup Automático**: Gerenciamento de memória e timers
+- � **Estados Derivados**: Estados computados para UX melhor
+
+### 🔗 Compatibilidade Mantida
+- ✅ **API Legacy**: Métodos antigos mantidos para compatibilidade
+- ✅ **Migração Gradual**: Adote novas práticas progressivamente
+- ✅ **TypeScript Melhorado**: Tipagem mais precisa e documentação inline
+
+### ⚠️ Principais Melhorias v2.4.1:
+
+1. **Hook incompleto sem novas funcionalidades** → ✅ **Hook oficial 100% atualizado**
+2. **Faltavam controles inteligentes** → ✅ **Controles automáticos baseados no estado**
+3. **Sem logging de eventos** → ✅ **Sistema completo de event logging**
+4. **Callbacks não integrados no hook** → ✅ **Integração total com callbacks**
+5. **Erros de tipagem TypeScript** → ✅ **Tipos corrigidos e interface atualizada**
+
+## 🆕 v2.3.0 - Correções Críticas de Estado
 
 A versão **v2.3.0** corrige **problemas críticos** de gerenciamento de estado Unity:
 
@@ -126,7 +174,7 @@ export default function DebugComponent() {
 
 ## �🚀 Uso Básico
 
-### Hook React (Recomendado) - v2.1.1+
+### Hook React Moderno (v2.5.0+) ⚛️
 
 ```typescript
 'use client';
@@ -134,7 +182,106 @@ export default function DebugComponent() {
 import { useRef } from 'react';
 import { useVLibrasPlayer } from 'vlibras-player-nextjs';
 
-export default function MyComponent() {
+export default function ModernVLibrasComponent() {
+  const containerRef = useRef<HTMLDivElement>(null);
+  
+  // 🚀 Hook com melhores práticas React
+  const player = useVLibrasPlayer({
+    containerRef,
+    autoInit: true,
+    retryOnError: true,
+    maxRetries: 3,
+    debounceMs: 300,
+    
+    // Callbacks organizados
+    onPlayerReady: () => console.log('🚀 Player pronto!'),
+    onStateChange: (state) => console.log('📊 Estado:', state.status),
+    onTranslationStart: () => console.log('🎬 Tradução iniciada'),
+    onTranslationEnd: () => console.log('✅ Tradução finalizada'),
+    onPlayerError: (error, isFatal) => {
+      console.log(isFatal ? '💥 Erro fatal:' : '⚠️ Aviso:', error);
+    }
+  });
+
+  const handleTranslate = async () => {
+    if (!player.canTranslate) return;
+    
+    try {
+      await player.translate("Olá mundo moderno!");
+    } catch (error) {
+      console.error('Erro na tradução:', error);
+    }
+  };
+
+  return (
+    <div>
+      <div ref={containerRef} className="vlibras-container" />
+      
+      {/* Controles inteligentes baseados em estado derivado */}
+      <button 
+        onClick={handleTranslate}
+        disabled={!player.canTranslate}
+      >
+        {player.isBusy ? 'Processando...' : 'Traduzir'}
+      </button>
+      
+      <button 
+        onClick={player.controls.pause}
+        disabled={!player.canPause}
+      >
+        Pausar
+      </button>
+      
+      <button 
+        onClick={player.controls.resume}
+        disabled={!player.canResume}
+      >
+        Retomar
+      </button>
+      
+      <button 
+        onClick={player.controls.stop}
+        disabled={!player.canStop}
+      >
+        Parar
+      </button>
+      
+      {/* Configurações */}
+      <button onClick={() => player.settings.setSpeed(1.5)}>
+        Velocidade 1.5x
+      </button>
+      
+      {/* Utilitários */}
+      {player.hasWarnings && (
+        <button onClick={player.utils.clearWarnings}>
+          Limpar Avisos ({player.errors.warnings.length})
+        </button>
+      )}
+      
+      {/* Estado visual */}
+      <div>
+        <p>Status: {player.status}</p>
+        <p>Pronto: {player.isReady ? '✅' : '⏳'}</p>
+        <p>Traduzindo: {player.isTranslating ? '🎬' : '⏸️'}</p>
+        <p>Reproduzindo: {player.isPlaying ? '▶️' : '⏹️'}</p>
+        {player.errors.fatal && (
+          <p style={{ color: 'red' }}>Erro: {player.errors.fatal}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+```
+
+### API de Compatibilidade (v2.4.x e anteriores)
+
+```typescript
+'use client';
+
+import { useRef } from 'react';
+import { useVLibrasPlayer } from 'vlibras-player-nextjs';
+
+export default function LegacyComponent() {
   const containerRef = useRef<HTMLDivElement>(null);
   
   const { translate, isReady, isLoading, error } = useVLibrasPlayer({
@@ -170,6 +317,7 @@ export default function MyComponent() {
       {error && <p style={{ color: 'red' }}>Erro: {error}</p>}
     </div>
   );
+}
 }
 ```
 

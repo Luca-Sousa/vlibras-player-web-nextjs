@@ -71,6 +71,22 @@ export class UnityPlayerManager {
   }
 
   /**
+   * ✅ NOVO: Retoma a reprodução pausada
+   */
+  resume(): void {
+    this.sendMessage('setPauseState', 0);
+  }
+
+  /**
+   * ✅ NOVO: Reinicia a animação atual (mesmo se estiver rodando)
+   */
+  restart(): void {
+    // 🔥 CORREÇÃO: Unity não tem comando restart nativo, então fazemos stop + play da glosa atual
+    this.sendMessage('stopAll');
+    // O restart será implementado na lógica do VLibrasPlayer
+  }
+
+  /**
    * Para toda a reprodução
    */
   stop(): void {
@@ -116,6 +132,13 @@ export class UnityPlayerManager {
   setBaseUrl(url: string): void {
     this.sendMessage('setBaseUrl', url);
     this.currentBaseUrl = url;
+  }
+
+  /**
+   * ✅ CRITICAL FIX: Inicializa animações aleatórias (método do original)
+   */
+  initRandomAnimationsProcess(): void {
+    this.sendMessage('initRandomAnimationsProcess');
   }
 
   /**

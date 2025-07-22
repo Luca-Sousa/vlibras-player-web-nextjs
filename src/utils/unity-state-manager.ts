@@ -1,3 +1,5 @@
+import type { UnityDebugInfo } from '../types';
+
 /**
  * Utilitário para gerenciamento de estado do Unity WebGL
  * Resolve problemas de detecção de carregamento e estado de animação
@@ -29,15 +31,34 @@ export class UnityStateManager {
       const canvas = container.querySelector('canvas');
       const unityInstance = this.getUnityInstance(container);
       
-      return !!(
-        canvas && 
-        canvas.clientWidth > 0 &&
-        canvas.clientHeight > 0 &&
-        unityInstance && 
+      // ✅ Verificação mais robusta
+      const hasValidCanvas = canvas && 
+        canvas.clientWidth > 0 && 
+        canvas.clientHeight > 0 && 
+        typeof canvas.getContext === 'function' &&
+        !canvas.style.display?.includes('none');
+        
+      const hasValidUnity = unityInstance && 
         unityInstance.Module && 
         unityInstance.Module.ready === true &&
-        unityInstance.SendMessage
-      );
+        unityInstance.SendMessage &&
+        typeof unityInstance.SendMessage === 'function';
+        
+      // ✅ Verificação adicional: tentar enviar mensagem de teste
+      let canSendMessage = false;
+      if (hasValidUnity && unityInstance?.SendMessage) {
+        try {
+          // Teste silencioso - não vai gerar erro se Unity estiver pronto
+          unityInstance.SendMessage('NonExistentObject', 'NonExistentMethod', '');
+          canSendMessage = true;
+        } catch (error) {
+          // Se der erro específico de objeto não encontrado, Unity está ok
+          const errorStr = error instanceof Error ? error.message : String(error);
+          canSendMessage = errorStr.includes('object') || errorStr.includes('method') || errorStr.includes('not found');
+        }
+      }
+      
+      return !!(hasValidCanvas && hasValidUnity && canSendMessage);
     } catch (error) {
       // Silently handle errors - avoid console warnings in production
       return false;
@@ -187,14 +208,14 @@ export class UnityStateManager {
   /**
    * Obtém informações de debug do estado atual
    */
-  static getDebugInfo(container?: HTMLElement): object {
+  static getDebugInfo(container?: HTMLElement): UnityDebugInfo {
     const unityInstance = this.getUnityInstance(container);
     const canvas = container?.querySelector('canvas');
     
     return {
       hasUnityInstance: !!unityInstance,
       hasModule: !!unityInstance?.Module,
-      moduleReady: unityInstance?.Module?.ready,
+      moduleReady: !!unityInstance?.Module?.ready,
       hasSendMessage: !!unityInstance?.SendMessage,
       hasCanvas: !!canvas,
       canvasSize: canvas ? `${canvas.clientWidth}x${canvas.clientHeight}` : 'N/A',

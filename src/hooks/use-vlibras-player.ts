@@ -1,460 +1,650 @@
 'use client';
 
-import { useState, useCallback, useRef, useEffect, RefObject } from 'react';
-import type { UseVLibrasPlayer, VLibrasPlayerOptions, VLibrasPlayerCallbacks, TranslationOptions, VLibrasPlayerState } from '../types';
+import { useCallback, useRef, useEffect, useMemo, useReducer } from 'react';
+import type { VLibrasPlayerOptions, VLibrasPlayerCallbacks, TranslationOptions } from '../types';
 import { VLibrasPlayer } from '../core/vlibras-player';
-import { UnityStateManager } from '../utils/unity-state-manager';
 
-// Estendendo as opções para incluir containerRef e callbacks
-interface UseVLibrasPlayerExtendedOptions extends VLibrasPlayerOptions, VLibrasPlayerCallbacks {
-  containerRef?: RefObject<HTMLElement>;
-  autoInit?: boolean;
-  onLoad?: () => void;
-  onTranslateStart?: (_text: string) => void;
-  onTranslateEnd?: (_gloss: string) => void;
-  onError?: (_error: string) => void;
+// ========================================
+// TIPOS E INTERFACES
+// ========================================
+
+interface VLibrasPlayerState {
+  // Estados principais
+  status: 'idle' | 'initializing' | 'ready' | 'translating' | 'playing' | 'paused' | 'error';
+  isLoading: boolean;
+  isReady: boolean;
+  
+  // Estados de reprodução
+  isTranslating: boolean;
+  isPlaying: boolean;
+  isPaused: boolean;
+  
+  // Dados do player
+  progress: number | null;
+  region: 'BR' | 'PT';
+  currentText?: string;
+  currentGloss?: string;
+  
+  // Gestão de erros
+  errors: {
+    fatal: string | null;
+    warnings: string[];
+  };
+  
+  // Metadados
+  lastTranslation?: {
+    text: string;
+    timestamp: number;
+  };
 }
 
+type VLibrasPlayerAction =
+  | { type: 'INITIALIZE_START' }
+  | { type: 'INITIALIZE_SUCCESS' }
+  | { type: 'INITIALIZE_ERROR'; payload: string }
+  | { type: 'TRANSLATION_START'; payload: string }
+  | { type: 'TRANSLATION_END' }
+  | { type: 'TRANSLATION_ERROR'; payload: string }
+  | { type: 'PLAYBACK_START' }
+  | { type: 'PLAYBACK_PAUSE' }
+  | { type: 'PLAYBACK_RESUME' }
+  | { type: 'PLAYBACK_STOP' }
+  | { type: 'PLAYBACK_RESTART' }
+  | { type: 'PROGRESS_UPDATE'; payload: number }
+  | { type: 'REGION_CHANGE'; payload: 'BR' | 'PT' }
+  | { type: 'WARNING_ADD'; payload: string }
+  | { type: 'WARNINGS_CLEAR' }
+  | { type: 'RESET' };
+
+interface UseVLibrasPlayerOptions extends Omit<VLibrasPlayerOptions, keyof VLibrasPlayerCallbacks> {
+  containerRef?: { current: HTMLElement | null };
+  autoInit?: boolean;
+  
+  // Callbacks organizados (compatibilidade com ambos os nomes)
+  onStateChange?: (state: VLibrasPlayerState) => void;
+  onPlayerReady?: () => void;
+  onLoad?: () => void; // Compatibilidade com VLibrasPlayer
+  onPlayerError?: (error: string, isFatal: boolean) => void;
+  onTranslationStart?: () => void;
+  onTranslationEnd?: () => void;
+  onTranslationError?: (error: string) => void;
+  onPlay?: () => void;
+  onPlaybackStart?: () => void;
+  onPlaybackEnd?: () => void;
+  onPause?: () => void;
+  onPlaybackPause?: () => void;
+  onResume?: () => void;
+  onPlaybackResume?: () => void;
+  onRestart?: () => void;
+  onPlaybackRestart?: () => void;
+  onStop?: () => void;
+  
+  // Configurações avançadas
+  retryOnError?: boolean;
+  maxRetries?: number;
+  debounceMs?: number;
+}
+
+// ========================================
+// REDUCER PARA GERENCIAMENTO DE ESTADO
+// ========================================
+
+const initialState: VLibrasPlayerState = {
+  status: 'idle',
+  isLoading: false,
+  isReady: false,
+  isTranslating: false,
+  isPlaying: false,
+  isPaused: false,
+  progress: null,
+  region: 'BR',
+  errors: {
+    fatal: null,
+    warnings: [],
+  },
+};
+
+function playerReducer(state: VLibrasPlayerState, action: VLibrasPlayerAction): VLibrasPlayerState {
+  switch (action.type) {
+    case 'INITIALIZE_START':
+      return {
+        ...state,
+        status: 'initializing',
+        isLoading: true,
+        errors: { fatal: null, warnings: [] },
+      };
+      
+    case 'INITIALIZE_SUCCESS':
+      return {
+        ...state,
+        status: 'ready',
+        isLoading: false,
+        isReady: true,
+      };
+      
+    case 'INITIALIZE_ERROR':
+      return {
+        ...state,
+        status: 'error',
+        isLoading: false,
+        isReady: false,
+        errors: { ...state.errors, fatal: action.payload },
+      };
+      
+    case 'TRANSLATION_START':
+      return {
+        ...state,
+        status: 'translating',
+        isTranslating: true,
+        currentText: action.payload,
+        lastTranslation: {
+          text: action.payload,
+          timestamp: Date.now(),
+        },
+      };
+      
+    case 'TRANSLATION_END':
+      return {
+        ...state,
+        status: 'ready',
+        isTranslating: false,
+      };
+      
+    case 'TRANSLATION_ERROR':
+      return {
+        ...state,
+        isTranslating: false,
+        errors: {
+          ...state.errors,
+          warnings: [...state.errors.warnings, action.payload],
+        },
+      };
+      
+    case 'PLAYBACK_START':
+      return {
+        ...state,
+        status: 'playing',
+        isPlaying: true,
+        isPaused: false,
+      };
+      
+    case 'PLAYBACK_PAUSE':
+      return {
+        ...state,
+        status: 'paused',
+        isPlaying: false,
+        isPaused: true,
+      };
+      
+    case 'PLAYBACK_RESUME':
+      return {
+        ...state,
+        status: 'playing',
+        isPlaying: true,
+        isPaused: false,
+      };
+      
+    case 'PLAYBACK_STOP':
+      return {
+        ...state,
+        status: 'ready',
+        isPlaying: false,
+        isPaused: false,
+        progress: null,
+      };
+      
+    case 'PLAYBACK_RESTART':
+      return {
+        ...state,
+        status: 'playing',
+        isPlaying: true,
+        isPaused: false,
+        progress: 0,
+      };
+      
+    case 'PROGRESS_UPDATE':
+      return {
+        ...state,
+        progress: action.payload,
+      };
+      
+    case 'REGION_CHANGE':
+      return {
+        ...state,
+        region: action.payload,
+      };
+      
+    case 'WARNING_ADD':
+      return {
+        ...state,
+        errors: {
+          ...state.errors,
+          warnings: [...state.errors.warnings, action.payload],
+        },
+      };
+      
+    case 'WARNINGS_CLEAR':
+      return {
+        ...state,
+        errors: {
+          ...state.errors,
+          warnings: [],
+        },
+      };
+      
+    case 'RESET':
+      return initialState;
+      
+    default:
+      return state;
+  }
+}
+
+// ========================================
+// HOOK PRINCIPAL
+// ========================================
+
 /**
- * Hook para usar o VLibras Player em componentes React
+ * Hook React para VLibras Player com melhores práticas
  * 
  * @example
- * // Uso com containerRef automático (recomendado)
+ * ```tsx
  * const containerRef = useRef<HTMLDivElement>(null);
- * const { translate, isReady } = useVLibrasPlayer({
+ * const player = useVLibrasPlayer({
+ *   containerRef,
  *   autoInit: true,
- *   containerRef
+ *   onPlayerReady: () => console.log('Player pronto!'),
+ *   onStateChange: (state) => console.log('Estado:', state.status)
  * });
  * 
- * // JSX
- * <div ref={containerRef} className="vlibras-container" />
- * <button onClick={() => translate("Olá mundo!")}>Traduzir</button>
+ * // Usar o player
+ * await player.translate('Olá mundo');
+ * ```
  */
-export function useVLibrasPlayer(options: UseVLibrasPlayerExtendedOptions = {}): UseVLibrasPlayer & { 
-  isReady: boolean;
-  containerRef?: RefObject<HTMLElement>;
-} {
+export function useVLibrasPlayer(options: UseVLibrasPlayerOptions = {}) {
   const {
     containerRef,
-    autoInit = true,
-    onLoad,
-    onTranslateStart, 
-    onTranslateEnd,
-    onError,
-    // ✅ Extrair novos callbacks
+    autoInit = false,
+    retryOnError = true,
+    maxRetries = 3,
+    debounceMs = 300,
+    onStateChange,
+    onPlayerReady,
+    onLoad, // Compatibilidade com VLibrasPlayer
+    onPlayerError,
     onTranslationStart,
     onTranslationEnd,
     onTranslationError,
     onPlay,
+    onPlaybackStart,
+    onPlaybackEnd,
     onPause,
+    onPlaybackPause,
+    onResume,
+    onPlaybackResume,
+    onRestart,
+    onPlaybackRestart,
     onStop,
-    onPlayerReady,
-    onPlayerError,
     ...playerOptions
   } = options;
 
+  // ========================================
+  // ESTADO GERENCIADO POR REDUCER
+  // ========================================
+  
+  const [state, dispatch] = useReducer(playerReducer, initialState);
+  
+  // Refs para instâncias e controle
   const playerRef = useRef<VLibrasPlayer | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [isReady, setIsReady] = useState(false);
-  const [isTranslating, setIsTranslating] = useState(false); // ✅ Novo estado
-  const [isPlaying, setIsPlaying] = useState(false); // ✅ Novo estado
-  const [player, setPlayer] = useState<VLibrasPlayerState>(() => ({
-    status: 'idle' as const,
-    loaded: false,
-    translated: false,
-    progress: null,
-    region: playerOptions.region || 'BR',
-    isTranslating: false, // ✅ Novo estado
-    isPlaying: false, // ✅ Novo estado
-  }));
+  const retryCountRef = useRef(0);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
-  // ✅ CRITICAL FIX: Inicialização com cleanup correto
-  useEffect(() => {
-    let cleanup: (() => void) | undefined;
+  // ========================================
+  // CALLBACKS MEMOIZADOS
+  // ========================================
+  
+  const handlePlayerReady = useCallback(() => {
+    dispatch({ type: 'INITIALIZE_SUCCESS' });
+    onPlayerReady?.();
+    onLoad?.(); // Compatibilidade com VLibrasPlayer
+  }, [onPlayerReady, onLoad]);
+
+  const handlePlayerError = useCallback((errorMessage: string) => {
+    const isFatal = errorMessage.includes('failed to load') || errorMessage.includes('network error');
     
-    if (autoInit && !playerRef.current) {
-      try {
-        playerRef.current = new VLibrasPlayer({
-          ...playerOptions,
-          // ✅ Passar callbacks para o player
-          onTranslationStart: () => {
-            setIsTranslating(true);
-            onTranslationStart?.();
-          },
-          onTranslationEnd: () => {
-            setIsTranslating(false);
-            onTranslationEnd?.();
-          },
-          onTranslationError: (error) => {
-            setIsTranslating(false);
-            onTranslationError?.(error);
-          },
-          onPlay: () => {
-            setIsPlaying(true);
-            onPlay?.();
-          },
-          onPause: () => {
-            setIsPlaying(false);
-            onPause?.();
-          },
-          onStop: () => {
-            setIsPlaying(false);
-            onStop?.();
-          },
-          onPlayerReady: () => {
-            onPlayerReady?.();
-          },
-          onPlayerError: (error) => {
-            onPlayerError?.(error);
-          },
-        });
-        cleanup = setupEventListeners();
-        onLoad?.();
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Erro ao inicializar player';
-        setError(errorMessage);
-        onError?.(errorMessage);
-      }
+    if (isFatal) {
+      dispatch({ type: 'INITIALIZE_ERROR', payload: errorMessage });
+    } else {
+      dispatch({ type: 'WARNING_ADD', payload: errorMessage });
+    }
+    
+    onPlayerError?.(errorMessage, isFatal);
+  }, [onPlayerError]);
+
+  const handleTranslationStart = useCallback((text: string) => {
+    dispatch({ type: 'TRANSLATION_START', payload: text });
+    onTranslationStart?.();
+  }, [onTranslationStart]);
+
+  const handleTranslationEnd = useCallback(() => {
+    dispatch({ type: 'TRANSLATION_END' });
+    onTranslationEnd?.();
+  }, [onTranslationEnd]);
+
+  const handleTranslationError = useCallback((errorMessage: string) => {
+    dispatch({ type: 'TRANSLATION_ERROR', payload: errorMessage });
+    onTranslationError?.(errorMessage);
+  }, [onTranslationError]);
+
+  const handlePlaybackStart = useCallback(() => {
+    dispatch({ type: 'PLAYBACK_START' });
+    onPlaybackStart?.();
+    onPlay?.(); // Compatibilidade com VLibrasPlayer
+  }, [onPlaybackStart, onPlay]);
+
+  const handlePlaybackPause = useCallback(() => {
+    dispatch({ type: 'PLAYBACK_PAUSE' });
+    onPlaybackPause?.();
+    onPause?.(); // Compatibilidade com VLibrasPlayer
+  }, [onPlaybackPause, onPause]);
+
+  const handlePlaybackResume = useCallback(() => {
+    dispatch({ type: 'PLAYBACK_RESUME' });
+    onPlaybackResume?.();
+    onResume?.(); // Compatibilidade com VLibrasPlayer
+  }, [onPlaybackResume, onResume]);
+
+  const handlePlaybackStop = useCallback(() => {
+    dispatch({ type: 'PLAYBACK_STOP' });
+    onPlaybackEnd?.();
+    onStop?.(); // Compatibilidade com VLibrasPlayer
+  }, [onPlaybackEnd, onStop]);
+
+  const handlePlaybackRestart = useCallback(() => {
+    dispatch({ type: 'PLAYBACK_RESTART' });
+    onPlaybackRestart?.();
+    onRestart?.(); // Compatibilidade com VLibrasPlayer
+  }, [onPlaybackRestart, onRestart]);
+
+  // ========================================
+  // FUNÇÕES DE CONTROLE DO PLAYER
+  // ========================================
+
+  const initializePlayer = useCallback(async (): Promise<void> => {
+    if (!containerRef?.current || playerRef.current || state.isLoading) {
+      return;
     }
 
-    return () => {
-      cleanup?.(); // ✅ Executar cleanup dos event listeners
+    // Cancelar operação anterior se existir
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = new AbortController();
+
+    dispatch({ type: 'INITIALIZE_START' });
+
+    try {
+      const player = new VLibrasPlayer({
+        ...playerOptions,
+        // Mapear callbacks do hook para os callbacks da classe
+        onLoad: () => {
+          const playerState = player.getState();
+          if (playerState.loaded) {
+            handlePlayerReady();
+          }
+        },
+        onPlayerError: handlePlayerError,
+        onTranslationStart: () => handleTranslationStart(state.currentText || ''),
+        onTranslationEnd: handleTranslationEnd,
+        onTranslationError: handleTranslationError,
+        onPlay: handlePlaybackStart,
+        onPause: handlePlaybackPause,
+        onResume: handlePlaybackResume,
+        onStop: handlePlaybackStop,
+        onRestart: handlePlaybackRestart,
+      });
+
+      await player.load(containerRef.current);
+      
+      // Verificar se a operação foi cancelada
+      if (abortControllerRef.current?.signal.aborted) {
+        player.dispose();
+        return;
+      }
+
+      playerRef.current = player;
+      retryCountRef.current = 0;
+
+    } catch (error) {
+      if (abortControllerRef.current?.signal.aborted) {
+        return;
+      }
+
+      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido ao inicializar player';
+      
+      // Tentar novamente se configurado
+      if (retryOnError && retryCountRef.current < maxRetries) {
+        retryCountRef.current++;
+        setTimeout(() => initializePlayer(), 1000 * retryCountRef.current);
+        return;
+      }
+
+      dispatch({ type: 'INITIALIZE_ERROR', payload: errorMessage });
+    }
+  }, [
+    containerRef,
+    playerOptions,
+    state.isLoading,
+    state.currentText,
+    handlePlayerReady,
+    handlePlayerError,
+    handleTranslationStart,
+    handleTranslationEnd,
+    handleTranslationError,
+    handlePlaybackStart,
+    handlePlaybackPause,
+    handlePlaybackResume,
+    handlePlaybackStop,
+    handlePlaybackRestart,
+    retryOnError,
+    maxRetries
+  ]);
+
+  const translate = useCallback(async (text: string, translationOptions?: TranslationOptions): Promise<void> => {
+    if (!playerRef.current) {
+      throw new Error('Player não inicializado. Chame initializePlayer() primeiro.');
+    }
+
+    if (!state.isReady) {
+      throw new Error('Player não está pronto. Aguarde a inicialização.');
+    }
+
+    // Debounce para evitar traduções muito rápidas
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    return new Promise((resolve, reject) => {
+      debounceTimerRef.current = setTimeout(async () => {
+        try {
+          await playerRef.current!.translate(text, translationOptions);
+          resolve();
+        } catch (error) {
+          reject(error);
+        }
+      }, debounceMs);
+    });
+  }, [state.isReady, debounceMs]);
+
+  // Métodos de controle memoizados
+  const controls = useMemo(() => ({
+    play: (gloss?: string | null, options?: TranslationOptions) => {
+      if (!playerRef.current) throw new Error('Player não inicializado');
+      return playerRef.current.play(gloss, options);
+    },
+    
+    pause: () => {
+      if (!playerRef.current) throw new Error('Player não inicializado');
+      return playerRef.current.pause();
+    },
+    
+    resume: () => {
+      if (!playerRef.current) throw new Error('Player não inicializado');
+      return playerRef.current.resume();
+    },
+    
+    stop: () => {
+      if (!playerRef.current) throw new Error('Player não inicializado');
+      return playerRef.current.stop();
+    },
+    
+    restart: () => {
+      if (!playerRef.current) throw new Error('Player não inicializado');
+      return playerRef.current.restart();
+    },
+    
+    repeat: () => {
+      if (!playerRef.current) throw new Error('Player não inicializado');
+      return playerRef.current.repeat();
+    },
+  }), []);
+
+  // Métodos de configuração memoizados
+  const settings = useMemo(() => ({
+    setSpeed: (speed: number) => {
+      if (!playerRef.current) throw new Error('Player não inicializado');
+      playerRef.current.setSpeed(speed);
+    },
+    
+    setRegion: (region: 'BR' | 'PT') => {
+      if (!playerRef.current) throw new Error('Player não inicializado');
+      playerRef.current.setRegion(region);
+      dispatch({ type: 'REGION_CHANGE', payload: region });
+    },
+    
+    changeAvatar: (avatarName: string) => {
+      if (!playerRef.current) throw new Error('Player não inicializado');
+      playerRef.current.changeAvatar(avatarName);
+    },
+    
+    toggleSubtitle: () => {
+      if (!playerRef.current) throw new Error('Player não inicializado');
+      playerRef.current.toggleSubtitle();
+    },
+    
+    playWelcome: () => {
+      if (!playerRef.current) throw new Error('Player não inicializado');
+      playerRef.current.playWelcome();
+    },
+  }), []);
+
+  // Estados derivados memoizados
+  const derivedState = useMemo(() => ({
+    canTranslate: state.isReady && !state.isTranslating,
+    canPause: state.isPlaying && !state.isPaused,
+    canResume: state.isPaused,
+    canStop: state.isPlaying || state.isPaused,
+    canRestart: state.isReady && (state.isPlaying || state.isPaused || state.lastTranslation),
+    hasWarnings: state.errors.warnings.length > 0,
+    isBusy: state.isLoading || state.isTranslating,
+  }), [state]);
+
+  // Utilitários
+  const utils = useMemo(() => ({
+    clearWarnings: () => dispatch({ type: 'WARNINGS_CLEAR' }),
+    reset: () => {
       if (playerRef.current) {
-        playerRef.current.dispose?.();
+        playerRef.current.dispose();
         playerRef.current = null;
       }
-    };
-  }, [autoInit, onLoad, onError, onTranslationStart, onTranslationEnd, onTranslationError, onPlay, onPause, onStop, onPlayerReady, onPlayerError]);
+      dispatch({ type: 'RESET' });
+    },
+    getPlayer: () => playerRef.current,
+    retry: () => {
+      retryCountRef.current = 0;
+      return initializePlayer();
+    },
+  }), [initializePlayer]);
 
-  // ✅ CRITICAL FIX: Conecta automaticamente ao container com verificações robustas
+  // ========================================
+  // EFEITOS
+  // ========================================
+
+  // Callback para mudanças de estado
   useEffect(() => {
-    let cleanup: (() => void) | undefined;
-    
-    if (playerRef.current && containerRef?.current && !isReady) {
-      const initializeConnection = async () => {
-        try {
-          setError(null);
-          
-          // Carregar o player no container
-          await playerRef.current!.load(containerRef.current!);
-          
-          // ✅ CRITICAL FIX: Aguardar Unity estar REALMENTE pronto
-          await UnityStateManager.waitForUnity(containerRef.current!);
-          
-          setIsReady(true);
-          onLoad?.(); // ✅ Callback onLoad SOMENTE quando Unity estiver pronto
-          
-        } catch (err) {
-          const errorMessage = err instanceof Error ? err.message : 'Erro ao conectar container';
-          setError(errorMessage);
-          setIsReady(false);
-          onError?.(errorMessage);
-        }
-      };
-      
-      initializeConnection();
+    onStateChange?.(state);
+  }, [state, onStateChange]);
+
+  // Inicialização automática
+  useEffect(() => {
+    if (autoInit && containerRef?.current && !playerRef.current && !state.isLoading) {
+      initializePlayer();
     }
-    
+  }, [autoInit, containerRef, initializePlayer, state.isLoading]);
+
+  // Limpeza ao desmontar
+  useEffect(() => {
     return () => {
-      cleanup?.(); // ✅ Limpar event listeners quando componente desmonta
-    };
-  }, [playerRef.current, containerRef?.current, onLoad, onError]);
-
-  const setupEventListeners = useCallback(() => {
-    if (!playerRef.current) return;
-
-    const playerInstance = playerRef.current;
-
-    // Função para limpar event listeners
-    const cleanup = () => {
-      if (playerInstance) {
-        playerInstance.removeAllListeners?.();
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      if (playerRef.current) {
+        playerRef.current.dispose();
       }
     };
+  }, []);
 
-    playerInstance.addEventListener('load', () => {
-      setPlayer((prev: VLibrasPlayerState) => ({ ...prev, loaded: true }));
-      setIsLoading(false);
-    });
-
-    playerInstance.addEventListener('translate:start', (text?: string) => {
-      setIsLoading(true);
-      setError(null);
-      if (text) onTranslateStart?.(text);
-    });
-
-    playerInstance.addEventListener('translate:end', (gloss?: string) => {
-      setIsLoading(false);
-      if (gloss) onTranslateEnd?.(gloss);
-    });
-
-    playerInstance.addEventListener('animation:play', () => {
-      setPlayer((prev: VLibrasPlayerState) => ({ ...prev, status: 'playing' }));
-    });
-
-    playerInstance.addEventListener('animation:pause', () => {
-      setPlayer((prev: VLibrasPlayerState) => ({ ...prev, status: 'idle' }));
-    });
-
-    playerInstance.addEventListener('animation:end', () => {
-      setPlayer((prev: VLibrasPlayerState) => ({ ...prev, status: 'idle' }));
-    });
-
-    playerInstance.addEventListener('animation:progress', (progress: number) => {
-      setPlayer((prev: VLibrasPlayerState) => ({ ...prev, progress }));
-    });
-
-    playerInstance.addEventListener('gloss:start', () => {
-      setPlayer((prev: VLibrasPlayerState) => ({ ...prev, status: 'playing' }));
-    });
-
-    playerInstance.addEventListener('gloss:end', () => {
-      setPlayer((prev: VLibrasPlayerState) => ({ ...prev, status: 'idle' }));
-    });
-
-    playerInstance.addEventListener('error', (errorMessage: string) => {
-      setError(errorMessage);
-      setIsLoading(false);
-      onError?.(errorMessage);
-    });
-
-    // Retornar função de cleanup
-    return cleanup;
-  }, [onTranslateStart, onTranslateEnd, onError]);
-
-  const translate = useCallback(async (text: string, options?: TranslationOptions) => {
-    if (!playerRef.current) {
-      const errorMsg = 'Player não inicializado. Use autoInit: true ou chame connect() primeiro.';
-      setError(errorMsg);
-      throw new Error(errorMsg);
-    }
-
-    if (!isReady) {
-      const errorMsg = 'Player não está pronto. Aguarde o carregamento completo.';
-      setError(errorMsg);
-      throw new Error(errorMsg);
-    }
-
-    if (!text.trim()) {
-      const errorMsg = 'Texto não pode estar vazio';
-      setError(errorMsg);
-      throw new Error(errorMsg);
-    }
-
-    try {
-      setError(null);
-      setIsLoading(true);
-      
-      // ✅ CRITICAL FIX: Aguardar tradução E animação terminarem
-      await playerRef.current.translate(text, options);
-      
-      setPlayer((prev: VLibrasPlayerState) => ({ 
-        ...prev, 
-        text, 
-        translated: true 
-      }));
-      
-      setIsLoading(false);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Erro na tradução';
-      setError(errorMessage);
-      setIsLoading(false);
-      onError?.(errorMessage);
-      throw err;
-    }
-  }, [isReady, onError]);
-
-  const connect = useCallback(async (container: HTMLElement) => {
-    if (!playerRef.current) {
-      const errorMsg = 'Player não inicializado. Use autoInit: true primeiro.';
-      setError(errorMsg);
-      throw new Error(errorMsg);
-    }
-
-    try {
-      setError(null);
-      setIsReady(false);
-      
-      // Carregar o player no container
-      await playerRef.current.load(container);
-      
-      // ✅ CRITICAL FIX: Aguardar Unity estar REALMENTE pronto
-      await UnityStateManager.waitForUnity(container);
-      
-      setIsReady(true);
-      onLoad?.(); // ✅ Callback onLoad SOMENTE quando Unity estiver pronto
-      
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Erro ao conectar container';
-      setError(errorMessage);
-      setIsReady(false);
-      onError?.(errorMessage);
-      throw err;
-    }
-  }, [onLoad, onError]);
-
-  const play = useCallback((gloss?: string, options?: TranslationOptions) => {
-    if (!playerRef.current) {
-      const errorMsg = 'Player não inicializado';
-      setError(errorMsg);
-      return;
-    }
-
-    if (!isReady) {
-      const errorMsg = 'Player não conectado a um container. Use containerRef ou connect()';
-      setError(errorMsg);
-      return;
-    }
-
-    try {
-      playerRef.current.play(gloss, options);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Erro ao reproduzir';
-      setError(errorMessage);
-      onError?.(errorMessage);
-    }
-  }, [isReady, onError]);
-
-  const pause = useCallback(() => {
-    if (!playerRef.current) {
-      const errorMsg = 'Player não inicializado';
-      setError(errorMsg);
-      return;
-    }
-
-    try {
-      playerRef.current.pause();
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Erro ao pausar';
-      setError(errorMessage);
-      onError?.(errorMessage);
-    }
-  }, [onError]);
-
-  const stop = useCallback(() => {
-    if (!playerRef.current) {
-      const errorMsg = 'Player não inicializado';
-      setError(errorMsg);
-      return;
-    }
-
-    try {
-      playerRef.current.stop();
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Erro ao parar';
-      setError(errorMessage);
-      onError?.(errorMessage);
-    }
-  }, [onError]);
-
-  const repeat = useCallback(() => {
-    if (!playerRef.current) {
-      const errorMsg = 'Player não inicializado';
-      setError(errorMsg);
-      return;
-    }
-
-    try {
-      playerRef.current.repeat();
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Erro ao repetir';
-      setError(errorMessage);
-      onError?.(errorMessage);
-    }
-  }, [onError]);
-
-  const setSpeed = useCallback((speed: number) => {
-    if (!playerRef.current) {
-      const errorMsg = 'Player não inicializado';
-      setError(errorMsg);
-      return;
-    }
-
-    try {
-      playerRef.current.setSpeed(speed);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Erro ao alterar velocidade';
-      setError(errorMessage);
-      onError?.(errorMessage);
-    }
-  }, [onError]);
-
-  const toggleSubtitle = useCallback(() => {
-    if (!playerRef.current) {
-      const errorMsg = 'Player não inicializado';
-      setError(errorMsg);
-      return;
-    }
-
-    try {
-      playerRef.current.toggleSubtitle();
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Erro ao alternar legenda';
-      setError(errorMessage);
-      onError?.(errorMessage);
-    }
-  }, [onError]);
-
-  const changeAvatar = useCallback((avatarName: string) => {
-    if (!playerRef.current) {
-      const errorMsg = 'Player não inicializado';
-      setError(errorMsg);
-      return;
-    }
-
-    try {
-      playerRef.current.changeAvatar(avatarName);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Erro ao alterar avatar';
-      setError(errorMessage);
-      onError?.(errorMessage);
-    }
-  }, [onError]);
-
-  const setRegion = useCallback((region: 'BR' | 'PT') => {
-    if (!playerRef.current) {
-      const errorMsg = 'Player não inicializado';
-      setError(errorMsg);
-      return;
-    }
-
-    try {
-      playerRef.current.setRegion(region);
-      setPlayer((prev: VLibrasPlayerState) => ({ ...prev, region }));
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Erro ao alterar região';
-      setError(errorMessage);
-      onError?.(errorMessage);
-    }
-  }, [onError]);
+  // ========================================
+  // RETORNO DO HOOK
+  // ========================================
 
   return {
-    // Estado do player
-    player,
-    isLoading,
-    error,
-    isReady,
+    // Estado principal
+    ...state,
+    ...derivedState,
     
-    // ✅ Novos estados baseados em eventos reais
-    isTranslating,
-    isPlaying,
-    
-    // Métodos de controle
+    // Métodos principais
     translate,
-    play,
-    pause,
-    stop,
-    repeat,
-    setSpeed,
-    toggleSubtitle,
-    changeAvatar,
-    setRegion,
+    initializePlayer,
     
-    // Método de conexão manual (para casos especiais)
-    connect,
+    // Controles agrupados
+    controls,
+    settings,
+    utils,
     
-    // Ref para casos onde o usuário não fornece containerRef
-    containerRef: containerRef || undefined,
+    // Compatibilidade (métodos individuais)
+    play: controls.play,
+    pause: controls.pause,
+    resume: controls.resume,
+    stop: controls.stop,
+    restart: controls.restart,
+    repeat: controls.repeat,
+    setSpeed: settings.setSpeed,
+    setRegion: settings.setRegion,
+    changeAvatar: settings.changeAvatar,
+    toggleSubtitle: settings.toggleSubtitle,
+    playWelcome: settings.playWelcome,
+    
+    // Dados legados para compatibilidade
+    player: {
+      status: state.status,
+      loaded: state.isReady,
+      translated: !!state.lastTranslation,
+      progress: state.progress,
+      region: state.region,
+      isTranslating: state.isTranslating,
+      isPlaying: state.isPlaying,
+      text: state.currentText,
+      gloss: state.currentGloss,
+    },
+    error: state.errors.fatal,
+    isLoading: state.isLoading,
+    isReady: state.isReady,
+    isTranslating: state.isTranslating,
+    isPlaying: state.isPlaying,
   };
 }
