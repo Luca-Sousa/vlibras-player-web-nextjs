@@ -1,0 +1,20 @@
+# ESLint ignore file
+# Arquivos e diretórios a serem ignorados pelo ESLint
+
+# Exemplos e demonstrações (permitem console statements)
+examples/
+demo/
+
+# Arquivos de build
+dist/
+build/
+
+# Arquivos de configuração
+*.config.js
+*.config.ts
+
+# Node modules
+node_modules/
+
+# Unity WebGL
+target/
